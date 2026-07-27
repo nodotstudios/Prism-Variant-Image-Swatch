@@ -7,6 +7,38 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 
+// Fallback in-memory storage for Vercel serverless environments
+class MemorySessionStorage {
+  private sessions = new Map<string, any>();
+
+  async storeSession(session: any): Promise<boolean> {
+    this.sessions.set(session.id, session);
+    return true;
+  }
+
+  async loadSession(id: string): Promise<any> {
+    return this.sessions.get(id);
+  }
+
+  async deleteSession(id: string): Promise<boolean> {
+    this.sessions.delete(id);
+    return true;
+  }
+
+  async deleteSessions(ids: string[]): Promise<boolean> {
+    ids.forEach((id) => this.sessions.delete(id));
+    return true;
+  }
+
+  async findSessionsByShop(shop: string): Promise<any[]> {
+    return Array.from(this.sessions.values()).filter((s) => s.shop === shop);
+  }
+}
+
+const storage = process.env.VERCEL
+  ? new MemorySessionStorage()
+  : new PrismaSessionStorage(prisma);
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
@@ -14,7 +46,7 @@ const shopify = shopifyApp({
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
-  sessionStorage: new PrismaSessionStorage(prisma),
+  sessionStorage: storage as any,
   distribution: AppDistribution.AppStore,
   future: {
     expiringOfflineAccessTokens: true,
