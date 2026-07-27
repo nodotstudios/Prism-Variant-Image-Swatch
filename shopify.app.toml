@@ -1,6 +1,6 @@
 client_id = "a0a866783c45c86112f2b73c0619088a"
 name = "PRISMA-Grouper"
-application_url = "https://example.com"
+application_url = "https://prisma-grouper.vercel.app"
 embedded = true
 
 [access_scopes]
@@ -36,7 +36,10 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://prisma-grouper.vercel.app/api/auth",
+  "https://prisma-grouper.vercel.app/auth/callback"
+]
 
 [build]
 automatically_update_urls_on_dev = true
