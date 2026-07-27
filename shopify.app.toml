@@ -1,0 +1,42 @@
+client_id = "a0a866783c45c86112f2b73c0619088a"
+name = "PRISMA-Grouper"
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+scopes = "write_products,read_products"
+
+[product.metafields.prism_variant_media.gallery_map]
+type = "json"
+name = "Prism Variant Media Gallery Map"
+description = "Stores variant to media item mapping for dynamic storefront gallery switching"
+
+  [product.metafields.prism_variant_media.gallery_map.access]
+  admin = "merchant_read_write"
+  storefront = "public_read"
+
+[product.metafields.prism_variant_media.enabled]
+type = "boolean"
+name = "Prism Variant Media Enabled"
+description = "Enables custom variant media filtering for this product"
+
+  [product.metafields.prism_variant_media.enabled.access]
+  admin = "merchant_read_write"
+  storefront = "public_read"
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+automatically_update_urls_on_dev = true

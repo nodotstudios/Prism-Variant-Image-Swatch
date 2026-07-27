@@ -1,0 +1,297 @@
+import type { LoaderFunctionArgs, ActionFunctionArgs } from 'react-router';
+import { useLoaderData, useSubmit, useNavigation, useActionData } from 'react-router';
+import { Page, Layout, Card, BlockStack, Text, Button, Checkbox, InlineGrid, Badge, Thumbnail, Banner, Divider, Box, InlineStack, Toast, Frame } from '@shopify/polaris';
+import { useState, useEffect } from 'react';
+import { authenticate } from '~/shopify.server';
+import { getProductGalleryMap, saveProductGalleryMap } from '~/services/metafields.server';
+import { generateGroupKey, GalleryMapPayload } from '~/models/gallery-map.schema';
+
+export const loader = async ({ params, request }: LoaderFunctionArgs) => {
+  const { admin } = await authenticate.admin(request);
+  const productId = `gid://shopify/Product/${params.id}`;
+  const data = await getProductGalleryMap(admin, productId);
+
+  if (!data) {
+    throw new Response('Product not found', { status: 404 });
+  }
+
+  return { data };
+};
+
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const { admin } = await authenticate.admin(request);
+  const productId = `gid://shopify/Product/${params.id}`;
+  const formData = await request.formData();
+  const payloadStr = formData.get('galleryMap') as string;
+  const enabledStr = formData.get('enabled') as string;
+
+  if (!payloadStr) {
+    return { success: false, error: 'Missing gallery map payload' };
+  }
+
+  const galleryMap: GalleryMapPayload = JSON.parse(payloadStr);
+  const enabled = enabledStr === 'true';
+
+  await saveProductGalleryMap(admin, productId, galleryMap, enabled);
+
+  return { success: true };
+};
+
+export default function SingleProductMapper() {
+  const { data } = useLoaderData<typeof loader>();
+  const actionData = useActionData<{ success?: boolean; error?: string }>();
+  const submit = useSubmit();
+  const navigation = useNavigation();
+  const isSaving = navigation.state === 'submitting';
+
+  const [toastActive, setToastActive] = useState(false);
+
+  useEffect(() => {
+    if (actionData?.success) {
+      setToastActive(true);
+    }
+  }, [actionData]);
+
+  const { product, galleryMap: initialMap, enabled: initialEnabled } = data;
+
+  const [enabled, setEnabled] = useState(initialEnabled);
+  const [selectedVisualOptions, setSelectedVisualOptions] = useState<string[]>(
+    initialMap.visualOptionNames.length > 0
+      ? initialMap.visualOptionNames
+      : product.options.map((o: any) => o.name).filter((n: string) => !['Size', 'Ring Size'].includes(n))
+  );
+
+  const [galleryMap, setGalleryMap] = useState<GalleryMapPayload>(initialMap);
+  const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
+
+  const generateCombinations = () => {
+    const visualOptions = product.options.filter((o: any) => selectedVisualOptions.includes(o.name));
+    if (visualOptions.length === 0) return {};
+
+    const combinations: Record<string, { label: string; variantIds: string[] }> = {};
+
+    for (const variant of product.variants.nodes) {
+      const selectedOptsMap: Record<string, string> = {};
+      const labels: string[] = [];
+
+      for (const opt of variant.selectedOptions) {
+        if (selectedVisualOptions.includes(opt.name)) {
+          selectedOptsMap[opt.name] = opt.value;
+          labels.push(opt.value);
+        }
+      }
+
+      const key = generateGroupKey(selectedOptsMap);
+      const label = labels.join(' / ') || 'Default';
+
+      if (!combinations[key]) {
+        combinations[key] = { label, variantIds: [] };
+      }
+      combinations[key].variantIds.push(variant.id);
+    }
+
+    return combinations;
+  };
+
+  const combinations = generateCombinations();
+  const combinationKeys = Object.keys(combinations);
+  const currentActiveKey = activeGroupKey || combinationKeys[0] || null;
+
+  const handleToggleOption = (optionName: string) => {
+    if (selectedVisualOptions.includes(optionName)) {
+      setSelectedVisualOptions(selectedVisualOptions.filter((o) => o !== optionName));
+    } else {
+      setSelectedVisualOptions([...selectedVisualOptions, optionName]);
+    }
+  };
+
+  const handleToggleMediaInGroup = (mediaId: string, groupKey: string) => {
+    const newGroups = { ...galleryMap.groups };
+    if (!newGroups[groupKey]) {
+      newGroups[groupKey] = {
+        label: combinations[groupKey]?.label || groupKey,
+        mediaIds: [],
+      };
+    }
+
+    const currentMediaIds = [...newGroups[groupKey].mediaIds];
+    const index = currentMediaIds.indexOf(mediaId);
+
+    if (index > -1) {
+      currentMediaIds.splice(index, 1);
+    } else {
+      currentMediaIds.push(mediaId);
+    }
+
+    newGroups[groupKey].mediaIds = currentMediaIds;
+
+    const newVariantToGroup = { ...galleryMap.variantToGroup };
+    for (const vId of combinations[groupKey]?.variantIds || []) {
+      newVariantToGroup[vId] = groupKey;
+    }
+
+    setGalleryMap({
+      ...galleryMap,
+      visualOptionNames: selectedVisualOptions,
+      groups: newGroups,
+      variantToGroup: newVariantToGroup,
+    });
+  };
+
+  const handleToggleSharedMedia = (mediaId: string) => {
+    let currentShared = [...galleryMap.sharedMediaIds];
+    if (currentShared.includes(mediaId)) {
+      currentShared = currentShared.filter((id) => id !== mediaId);
+    } else {
+      currentShared.push(mediaId);
+    }
+
+    setGalleryMap({
+      ...galleryMap,
+      sharedMediaIds: currentShared,
+    });
+  };
+
+  const handleSave = () => {
+    const finalMap = {
+      ...galleryMap,
+      visualOptionNames: selectedVisualOptions,
+    };
+
+    const formData = new FormData();
+    formData.set('galleryMap', JSON.stringify(finalMap));
+    formData.set('enabled', enabled ? 'true' : 'false');
+
+    submit(formData, { method: 'post' });
+  };
+
+  return (
+    <Frame>
+      <Page
+        title={`Edit Media Map: ${product.title}`}
+        backAction={{ content: 'Products Catalog', url: '/app/products' }}
+        primaryAction={{
+          content: isSaving ? 'Saving...' : 'Save Mapping',
+          onAction: handleSave,
+          loading: isSaving,
+        }}
+      >
+        <BlockStack gap="500">
+          <Banner title="Ensure Theme App Embed is Active" tone="warning">
+            <p>
+              To filter product gallery images on your storefront, enable the <b>Prism Variant Media Embed</b> app embed in your Shopify Theme Editor!
+            </p>
+            <Box paddingBlockStart="200">
+              <Button
+                variant="primary"
+                onClick={() => window.open('https://admin.shopify.com/store/themes/current/editor?context=apps', '_blank')}
+              >
+                Open Theme Editor & Enable App Embed
+              </Button>
+            </Box>
+          </Banner>
+
+          <Banner title="Product Configuration">
+            <p>Select which options dictate media images & videos, then assign media items to each combination below.</p>
+          </Banner>
+
+          <Layout>
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingMd">Step 1 — Choose Visual Options</Text>
+                  <Text as="h3" variant="headingSm">Select options that dictate media images & videos:</Text>
+                  <InlineStack gap="400">
+                    {product.options.map((opt: any) => (
+                      <Checkbox
+                        key={opt.id}
+                        label={`${opt.name} (${opt.values.length} values)`}
+                        checked={selectedVisualOptions.includes(opt.name)}
+                        onChange={() => handleToggleOption(opt.name)}
+                      />
+                    ))}
+                  </InlineStack>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">Step 2 & 3 — Media Assignment Grid</Text>
+                  <Text as="h3" variant="headingSm">Visual Combinations ({combinationKeys.length.toString()}):</Text>
+                  
+                  <InlineStack gap="200">
+                    {combinationKeys.map((key) => {
+                      const isSelected = key === currentActiveKey;
+                      const assignedCount = galleryMap.groups[key]?.mediaIds?.length || 0;
+                      return (
+                        <Button
+                          key={key}
+                          tone={isSelected ? 'critical' : undefined}
+                          variant={isSelected ? 'primary' : 'secondary'}
+                          onClick={() => setActiveGroupKey(key)}
+                        >
+                          {`${combinations[key].label} (${assignedCount.toString()} media)`}
+                        </Button>
+                      );
+                    })}
+                  </InlineStack>
+
+                  <Divider />
+
+                  {currentActiveKey && (
+                    <BlockStack gap="300">
+                      <Text as="h3" variant="headingMd">
+                        Assign Media for: <b>{combinations[currentActiveKey]?.label}</b>
+                      </Text>
+
+                      <InlineGrid columns={{ xs: 2, sm: 4, md: 6 }} gap="300">
+                        {product.media.nodes.map((mediaItem: any) => {
+                          const mediaId = mediaItem.id;
+                          const isAssigned = (galleryMap.groups[currentActiveKey]?.mediaIds || []).includes(mediaId);
+                          const isShared = galleryMap.sharedMediaIds.includes(mediaId);
+                          const imgUrl = mediaItem.image?.url || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png';
+
+                          return (
+                            <Box
+                              key={mediaId}
+                              padding="200"
+                              borderWidth="025"
+                              borderColor={isAssigned ? 'border-brand' : 'border-secondary'}
+                              borderRadius="200"
+                            >
+                              <BlockStack gap="200" align="center">
+                                <Thumbnail source={imgUrl} alt={mediaItem.alt || 'Media item'} size="medium" />
+                                <Badge tone={mediaItem.mediaContentType === 'IMAGE' ? 'info' : 'attention'}>
+                                  {mediaItem.mediaContentType}
+                                </Badge>
+                                <Checkbox
+                                  label="Assign to Group"
+                                  checked={isAssigned}
+                                  onChange={() => handleToggleMediaInGroup(mediaId, currentActiveKey)}
+                                />
+                                <Checkbox
+                                  label="Shared (All)"
+                                  checked={isShared}
+                                  onChange={() => handleToggleSharedMedia(mediaId)}
+                                />
+                              </BlockStack>
+                            </Box>
+                          );
+                        })}
+                      </InlineGrid>
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          </Layout>
+        </BlockStack>
+        {toastActive && (
+          <Toast content="Mapping saved successfully!" onDismiss={() => setToastActive(false)} duration={4000} />
+        )}
+      </Page>
+    </Frame>
+  );
+}

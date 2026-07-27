@@ -1,0 +1,33 @@
+{% if template.name == 'product' and product %}
+  {% assign enabled_metafield = product.metafields.prism_variant_media.enabled %}
+  {% assign gallery_map_metafield = product.metafields.prism_variant_media.gallery_map %}
+
+  {% if enabled_metafield == true or enabled_metafield == 'true' or enabled_metafield == nil %}
+    {% if gallery_map_metafield != blank %}
+      <script id="prism-variant-media-data" type="application/json">
+        {
+          "productId": {{ product.id | json }},
+          "selectedVariantId": {{ product.selected_or_first_available_variant.id | json }},
+          "galleryMapRaw": {{ gallery_map_metafield.value | json }},
+          "debug": {{ block.settings.enable_logging | default: false | json }}
+        }
+      </script>
+      <script src="{{ 'prism-gallery.js' | asset_url }}" defer="defer"></script>
+    {% endif %}
+  {% endif %}
+{% endif %}
+
+{% schema %}
+{
+  "name": "Prism Variant Media",
+  "target": "body",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enable_logging",
+      "label": "Enable Debug Console Logging",
+      "default": false
+    }
+  ]
+}
+{% endschema %}
