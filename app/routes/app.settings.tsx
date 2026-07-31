@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
-import { useActionData, useLoaderData, useSubmit } from 'react-router';
+import { Form, useActionData, useLoaderData } from 'react-router';
 import {
   Page,
   Layout,
@@ -34,7 +34,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
   } catch (e) {
-    // Billing check unavailable in dev environment
+    // Billing check unavailable in dev/test environment
   }
 
   return {
@@ -51,30 +51,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const apiKey = process.env.SHOPIFY_API_KEY || "b524766caf5859eb3910305d16617068";
   const returnUrl = `https://${session.shop}/admin/apps/${apiKey}/app/settings`;
 
-  try {
-    if (planToSubscribe === 'PRO') {
-      return await billing.request({
-        plan: PLAN_PRO,
-        isTest: true,
-        returnUrl,
-      });
-    }
+  if (planToSubscribe === 'PRO') {
+    return await billing.request({
+      plan: PLAN_PRO,
+      isTest: true,
+      returnUrl,
+    });
+  }
 
-    if (planToSubscribe === 'ENTERPRISE') {
-      return await billing.request({
-        plan: PLAN_ENTERPRISE,
-        isTest: true,
-        returnUrl,
-      });
-    }
-  } catch (error: any) {
-    // React Router / Remix billing.request throws a Response object to initiate the billing redirect.
-    // Re-throw if error is a Response object so React Router processes the redirect.
-    if (error instanceof Response || (error && typeof error === 'object' && ('status' in error || 'headers' in error))) {
-      throw error;
-    }
-    console.error('[Billing Real Error]', error);
-    return { error: error?.message || 'Failed to initiate billing request with Shopify.' };
+  if (planToSubscribe === 'ENTERPRISE') {
+    return await billing.request({
+      plan: PLAN_ENTERPRISE,
+      isTest: true,
+      returnUrl,
+    });
   }
 
   return { success: true };
@@ -83,16 +73,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function SettingsPage() {
   const { currentPlan } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const submit = useSubmit();
 
   const [fallbackMode, setFallbackMode] = useState(['show_all']);
   const [sharedPosition, setSharedPosition] = useState(['after']);
-
-  const handleSelectPlan = (planKey: string) => {
-    const formData = new FormData();
-    formData.set('plan', planKey);
-    submit(formData, { method: 'post' });
-  };
 
   return (
     <Page title="App Settings & Subscription Plans" subtitle="Manage your subscription tier, billing, and global storefront behaviors">
@@ -131,7 +114,6 @@ export default function SettingsPage() {
 
                     <Button
                       disabled={currentPlan === 'FREE'}
-                      onClick={() => handleSelectPlan('FREE')}
                       fullWidth
                     >
                       {currentPlan === 'FREE' ? 'Current Plan' : 'Downgrade to Free'}
@@ -163,14 +145,17 @@ export default function SettingsPage() {
                       <List.Item>Priority Support</List.Item>
                     </List>
 
-                    <Button
-                      variant="primary"
-                      disabled={currentPlan === 'PRO'}
-                      onClick={() => handleSelectPlan('PRO')}
-                      fullWidth
-                    >
-                      {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
-                    </Button>
+                    <Form method="post">
+                      <input type="hidden" name="plan" value="PRO" />
+                      <Button
+                        variant="primary"
+                        submit
+                        disabled={currentPlan === 'PRO'}
+                        fullWidth
+                      >
+                        {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
+                      </Button>
+                    </Form>
                   </BlockStack>
                 </Box>
               </Card>
@@ -194,14 +179,17 @@ export default function SettingsPage() {
                       <List.Item>1-on-1 Setup Assistance</List.Item>
                     </List>
 
-                    <Button
-                      variant="primary"
-                      disabled={currentPlan === 'ENTERPRISE'}
-                      onClick={() => handleSelectPlan('ENTERPRISE')}
-                      fullWidth
-                    >
-                      {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
-                    </Button>
+                    <Form method="post">
+                      <input type="hidden" name="plan" value="ENTERPRISE" />
+                      <Button
+                        variant="primary"
+                        submit
+                        disabled={currentPlan === 'ENTERPRISE'}
+                        fullWidth
+                      >
+                        {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
+                      </Button>
+                    </Form>
                   </BlockStack>
                 </Box>
               </Card>
