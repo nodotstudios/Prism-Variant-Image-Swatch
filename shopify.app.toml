@@ -1,6 +1,6 @@
 client_id = "b524766caf5859eb3910305d16617068"
 name = "Prism Variant Image & Swatch"
-application_url = "https://prisma-grouper.vercel.app"
+application_url = "https://prism-variant-image-swatch.vercel.app"
 embedded = true
 
 [access_scopes]
@@ -37,8 +37,8 @@ api_version = "2026-10"
 
 [auth]
 redirect_urls = [
-  "https://prisma-grouper.vercel.app/api/auth",
-  "https://prisma-grouper.vercel.app/auth/callback"
+  "https://prism-variant-image-swatch.vercel.app/api/auth",
+  "https://prism-variant-image-swatch.vercel.app/auth/callback"
 ]
 
 [build]
