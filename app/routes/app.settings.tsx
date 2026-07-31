@@ -34,7 +34,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
   } catch (e) {
-    // Billing check unavailable in test/dev environment
+    // Billing check unavailable in dev environment
   }
 
   return {
@@ -68,7 +68,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
   } catch (error: any) {
-    console.error('[Billing Error]', error);
+    // React Router / Remix billing.request throws a Response object to initiate the billing redirect.
+    // Re-throw if error is a Response object so React Router processes the redirect.
+    if (error instanceof Response || (error && typeof error === 'object' && ('status' in error || 'headers' in error))) {
+      throw error;
+    }
+    console.error('[Billing Real Error]', error);
     return { error: error?.message || 'Failed to initiate billing request with Shopify.' };
   }
 
