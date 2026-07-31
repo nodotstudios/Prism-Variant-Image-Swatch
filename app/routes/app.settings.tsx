@@ -1,30 +1,203 @@
-import type { LoaderFunctionArgs } from 'react-router';
-import { Page, Layout, Card, BlockStack, Text, Banner, ChoiceList, List } from '@shopify/polaris';
+import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
+import { useLoaderData, useSubmit } from 'react-router';
+import {
+  Page,
+  Layout,
+  Card,
+  BlockStack,
+  Text,
+  Banner,
+  ChoiceList,
+  List,
+  Button,
+  InlineGrid,
+  Badge,
+  Box,
+} from '@shopify/polaris';
 import { useState } from 'react';
-import { authenticate } from '../shopify.server';
+import { authenticate, PLAN_PRO, PLAN_ENTERPRISE } from '../shopify.server';
+import { APP_CONFIG } from '../config/app.config';
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-  return {};
+  const { billing, session } = await authenticate.admin(request);
+
+  let currentPlan = 'FREE';
+  try {
+    const checkResult = await billing.check({
+      plans: [PLAN_PRO, PLAN_ENTERPRISE],
+      isTest: true,
+    });
+    if (checkResult.hasActivePayment) {
+      if (checkResult.appSubscriptions.some((sub) => sub.name === PLAN_ENTERPRISE)) {
+        currentPlan = 'ENTERPRISE';
+      } else if (checkResult.appSubscriptions.some((sub) => sub.name === PLAN_PRO)) {
+        currentPlan = 'PRO';
+      }
+    }
+  } catch (e) {
+    // If billing check is unavailable in dev/mock environment
+  }
+
+  return {
+    currentPlan,
+    shop: session.shop,
+  };
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { billing, session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const planToSubscribe = formData.get('plan');
+
+  const shopName = session.shop.replace('.myshopify.com', '');
+  const returnUrl = `https://admin.shopify.com/store/${shopName}/apps/${process.env.SHOPIFY_API_KEY}/app/settings`;
+
+  if (planToSubscribe === 'PRO') {
+    return await billing.request({
+      plan: PLAN_PRO,
+      isTest: true,
+      returnUrl,
+    });
+  }
+
+  if (planToSubscribe === 'ENTERPRISE') {
+    return await billing.request({
+      plan: PLAN_ENTERPRISE,
+      isTest: true,
+      returnUrl,
+    });
+  }
+
+  return { success: true };
 };
 
 export default function SettingsPage() {
+  const { currentPlan } = useLoaderData<typeof loader>();
+  const submit = useSubmit();
+
   const [fallbackMode, setFallbackMode] = useState(['show_all']);
   const [sharedPosition, setSharedPosition] = useState(['after']);
 
+  const handleSelectPlan = (planKey: string) => {
+    const formData = new FormData();
+    formData.set('plan', planKey);
+    submit(formData, { method: 'post' });
+  };
+
   return (
-    <Page title="App Settings & Onboarding" subtitle="Configure global storefront gallery behaviors and theme options">
+    <Page title="App Settings & Subscription Plans" subtitle="Manage your subscription tier, billing, and global storefront behaviors">
       <BlockStack gap="500">
-        <Banner title="Horizon Theme Integration Active" tone="success">
-          <p>Theme App Extension adapter is targeted for the <b>Horizon</b> theme with fallback support for <b>Dawn</b> and generic themes.</p>
-        </Banner>
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingLg">Subscription Plans & Billing</Text>
+            <Text as="p" variant="bodyMd" tone="subdued">
+              Choose the plan that fits your catalog size and automation requirements.
+            </Text>
+
+            <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+              {/* FREE PLAN */}
+              <Card roundedAbove="sm">
+                <Box padding="400">
+                  <BlockStack gap="300">
+                    <InlineGrid columns="2" align="space-between">
+                      <Text as="h3" variant="headingMd">FREE</Text>
+                      {currentPlan === 'FREE' && <Badge tone="success">Active Plan</Badge>}
+                    </InlineGrid>
+
+                    <Text as="p" variant="heading2xl">$0 <Text as="span" variant="bodySm" tone="subdued">/ month</Text></Text>
+
+                    <List type="bullet">
+                      <List.Item>Up to <b>10 Mapped Products</b></List.Item>
+                      <List.Item>Single Visual Option Mapping</List.Item>
+                      <List.Item>Zero-Latency Storefront CDN</List.Item>
+                      <List.Item>Standard Support</List.Item>
+                    </List>
+
+                    <Button
+                      disabled={currentPlan === 'FREE'}
+                      onClick={() => handleSelectPlan('FREE')}
+                      fullWidth
+                    >
+                      {currentPlan === 'FREE' ? 'Current Plan' : 'Downgrade to Free'}
+                    </Button>
+                  </BlockStack>
+                </Box>
+              </Card>
+
+              {/* PRO PLAN */}
+              <Card roundedAbove="sm">
+                <Box padding="400">
+                  <BlockStack gap="300">
+                    <InlineGrid columns="2" align="space-between">
+                      <Text as="h3" variant="headingMd">PRO</Text>
+                      {currentPlan === 'PRO' ? (
+                        <Badge tone="success">Active Plan</Badge>
+                      ) : (
+                        <Badge tone="attention">Popular</Badge>
+                      )}
+                    </InlineGrid>
+
+                    <Text as="p" variant="heading2xl">$9.99 <Text as="span" variant="bodySm" tone="subdued">/ month</Text></Text>
+
+                    <List type="bullet">
+                      <List.Item>Up to <b>100 Mapped Products</b></List.Item>
+                      <List.Item>Multi-Option Mapping</List.Item>
+                      <List.Item>Videos &amp; 3D Models Support</List.Item>
+                      <List.Item>Shared Media Support</List.Item>
+                      <List.Item>Priority Support</List.Item>
+                    </List>
+
+                    <Button
+                      variant="primary"
+                      disabled={currentPlan === 'PRO'}
+                      onClick={() => handleSelectPlan('PRO')}
+                      fullWidth
+                    >
+                      {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
+                    </Button>
+                  </BlockStack>
+                </Box>
+              </Card>
+
+              {/* ENTERPRISE PLAN */}
+              <Card roundedAbove="sm">
+                <Box padding="400">
+                  <BlockStack gap="300">
+                    <InlineGrid columns="2" align="space-between">
+                      <Text as="h3" variant="headingMd">ENTERPRISE</Text>
+                      {currentPlan === 'ENTERPRISE' && <Badge tone="success">Active Plan</Badge>}
+                    </InlineGrid>
+
+                    <Text as="p" variant="heading2xl">$29.99 <Text as="span" variant="bodySm" tone="subdued">/ month</Text></Text>
+
+                    <List type="bullet">
+                      <List.Item><b>UNLIMITED Mapped Products</b></List.Item>
+                      <List.Item>Bulk Automated Pattern Rules</List.Item>
+                      <List.Item>CSV Import / Export Batch</List.Item>
+                      <List.Item>Multi-Option &amp; Shared Media</List.Item>
+                      <List.Item>1-on-1 Setup Assistance</List.Item>
+                    </List>
+
+                    <Button
+                      variant="primary"
+                      disabled={currentPlan === 'ENTERPRISE'}
+                      onClick={() => handleSelectPlan('ENTERPRISE')}
+                      fullWidth
+                    >
+                      {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
+                    </Button>
+                  </BlockStack>
+                </Box>
+              </Card>
+            </InlineGrid>
+          </BlockStack>
+        </Card>
 
         <Layout>
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">Storefront Fallback Settings</Text>
-                <Text as="h3" variant="headingSm">Unassigned Variant Behavior:</Text>
                 <ChoiceList
                   title="Fallback Mode when a variant has no explicit media mapping:"
                   choices={[
@@ -53,13 +226,12 @@ export default function SettingsPage() {
           <Layout.Section variant="oneThird">
             <Card>
               <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">Onboarding Steps</Text>
+                <Text as="h2" variant="headingMd">Quick Checklist</Text>
                 <List type="number">
-                  <List.Item>Ensure product metafield definitions are active (Done).</List.Item>
-                  <List.Item>Map images/videos to variant combinations in Product Catalog.</List.Item>
-                  <List.Item>Open Online Store -&gt; Themes -&gt; Customize Horizon Theme.</List.Item>
-                  <List.Item>Under App Embeds, enable <b>Prism Variant Media Embed</b>.</List.Item>
-                  <List.Item>Save theme changes and preview product page variant switching!</List.Item>
+                  <List.Item>Select your subscription plan above.</List.Item>
+                  <List.Item>Map images/videos in Products Catalog.</List.Item>
+                  <List.Item>Open Theme Editor -&gt; App Embeds.</List.Item>
+                  <List.Item>Enable <b>Prism Variant Swatches</b>.</List.Item>
                 </List>
               </BlockStack>
             </Card>
