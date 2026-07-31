@@ -74,7 +74,7 @@ export default function BulkMapper() {
   };
 
   return (
-    <Page title="Bulk Media Mapper" subtitle="Automate multi-variant media mapping for 1,000+ jewellery products using pattern rules">
+    <Page title="Bulk Media Mapper" subtitle="Automate multi-variant media mapping for 1,000+ products using pattern rules">
       <BlockStack gap="500">
         <Banner title="Batch Automation Rules" tone="info">
           <p>Rules scan media filenames and alt-text tags across your catalog to map images, videos, and 3D models to specific visual combinations automatically.</p>

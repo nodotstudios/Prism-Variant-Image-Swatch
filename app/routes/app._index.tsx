@@ -22,7 +22,7 @@ export default function Dashboard() {
   };
 
   return (
-    <Page title="Prism Variant Media Dashboard" subtitle="Assign multiple images, videos, and 3D models to product variant combinations">
+    <Page title="Prism Variant Image & Swatch Dashboard" subtitle="Assign multiple images, videos, swatches, and 3D models to product variant combinations">
       <BlockStack gap="500">
         <Banner title="Step 1 — Enable Theme App Embed Required" tone="warning">
           <p>

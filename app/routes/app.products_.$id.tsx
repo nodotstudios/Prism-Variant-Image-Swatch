@@ -58,7 +58,7 @@ export default function SingleProductMapper() {
   const [selectedVisualOptions, setSelectedVisualOptions] = useState<string[]>(
     initialMap.visualOptionNames.length > 0
       ? initialMap.visualOptionNames
-      : product.options.map((o: any) => o.name).filter((n: string) => !['Size', 'Ring Size'].includes(n))
+      : product.options.map((o: any) => o.name).filter((n: string) => !['Size', 'Length', 'Quantity'].includes(n))
   );
 
   const [galleryMap, setGalleryMap] = useState<GalleryMapPayload>(initialMap);
