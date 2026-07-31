@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
-import { useLoaderData, useSubmit } from 'react-router';
+import { useActionData, useLoaderData, useSubmit } from 'react-router';
 import {
   Page,
   Layout,
@@ -16,7 +16,6 @@ import {
 } from '@shopify/polaris';
 import { useState } from 'react';
 import { authenticate, PLAN_PRO, PLAN_ENTERPRISE } from '../shopify.server';
-import { APP_CONFIG } from '../config/app.config';
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { billing, session } = await authenticate.admin(request);
@@ -35,7 +34,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
   } catch (e) {
-    // If billing check is unavailable in dev/mock environment
+    // Billing check unavailable in test/dev environment
   }
 
   return {
@@ -49,23 +48,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const planToSubscribe = formData.get('plan');
 
-  const shopName = session.shop.replace('.myshopify.com', '');
-  const returnUrl = `https://admin.shopify.com/store/${shopName}/apps/${process.env.SHOPIFY_API_KEY}/app/settings`;
+  const apiKey = process.env.SHOPIFY_API_KEY || "b524766caf5859eb3910305d16617068";
+  const returnUrl = `https://${session.shop}/admin/apps/${apiKey}/app/settings`;
 
-  if (planToSubscribe === 'PRO') {
-    return await billing.request({
-      plan: PLAN_PRO,
-      isTest: true,
-      returnUrl,
-    });
-  }
+  try {
+    if (planToSubscribe === 'PRO') {
+      return await billing.request({
+        plan: PLAN_PRO,
+        isTest: true,
+        returnUrl,
+      });
+    }
 
-  if (planToSubscribe === 'ENTERPRISE') {
-    return await billing.request({
-      plan: PLAN_ENTERPRISE,
-      isTest: true,
-      returnUrl,
-    });
+    if (planToSubscribe === 'ENTERPRISE') {
+      return await billing.request({
+        plan: PLAN_ENTERPRISE,
+        isTest: true,
+        returnUrl,
+      });
+    }
+  } catch (error: any) {
+    console.error('[Billing Error]', error);
+    return { error: error?.message || 'Failed to initiate billing request with Shopify.' };
   }
 
   return { success: true };
@@ -73,6 +77,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function SettingsPage() {
   const { currentPlan } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const submit = useSubmit();
 
   const [fallbackMode, setFallbackMode] = useState(['show_all']);
@@ -87,6 +92,12 @@ export default function SettingsPage() {
   return (
     <Page title="App Settings & Subscription Plans" subtitle="Manage your subscription tier, billing, and global storefront behaviors">
       <BlockStack gap="500">
+        {actionData?.error && (
+          <Banner title="Subscription Request Issue" tone="warning">
+            <p>{actionData.error}</p>
+          </Banner>
+        )}
+
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingLg">Subscription Plans & Billing</Text>
