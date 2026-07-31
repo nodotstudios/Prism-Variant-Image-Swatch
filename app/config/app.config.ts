@@ -6,6 +6,23 @@ export const APP_CONFIG = {
     keyGalleryMap: 'gallery_map',
     keyEnabled: 'enabled',
   },
+  plans: {
+    FREE: {
+      name: 'Free Plan',
+      price: 0,
+      productLimit: 10,
+    },
+    PRO: {
+      name: 'Pro Plan',
+      price: 9.99,
+      productLimit: 100,
+    },
+    ENTERPRISE: {
+      name: 'Enterprise Plan',
+      price: 29.99,
+      productLimit: Infinity,
+    },
+  },
   defaults: {
     visualOptionNames: ['Color', 'Colour', 'Style', 'Pattern', 'Material', 'Finish', 'Design', 'Model'],
     nonVisualOptionNames: ['Size', 'Length', 'Quantity', 'Pack Size'],

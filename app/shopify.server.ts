@@ -2,10 +2,14 @@ import "@shopify/shopify-app-react-router/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
+  BillingInterval,
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+
+export const PLAN_PRO = 'Pro Plan ($9.99/mo)';
+export const PLAN_ENTERPRISE = 'Enterprise Plan ($29.99/mo)';
 
 // Fallback in-memory storage for Vercel serverless environments
 class MemorySessionStorage {
@@ -48,6 +52,18 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: storage as any,
   distribution: AppDistribution.AppStore,
+  billing: {
+    [PLAN_PRO]: {
+      amount: 9.99,
+      currencyCode: 'USD',
+      interval: BillingInterval.Every30Days,
+    },
+    [PLAN_ENTERPRISE]: {
+      amount: 29.99,
+      currencyCode: 'USD',
+      interval: BillingInterval.Every30Days,
+    },
+  },
   future: {
     expiringOfflineAccessTokens: true,
   },
