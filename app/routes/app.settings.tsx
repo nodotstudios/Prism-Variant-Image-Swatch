@@ -14,7 +14,7 @@ import {
   Badge,
   Box,
 } from '@shopify/polaris';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { authenticate, PLAN_PRO, PLAN_ENTERPRISE } from '../shopify.server';
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
