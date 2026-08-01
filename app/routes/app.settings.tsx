@@ -85,7 +85,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
-  return redirect('/app/settings');
+  return { success: true };
 };
 
 export default function SettingsPage() {
@@ -130,7 +130,7 @@ export default function SettingsPage() {
                       <List.Item>Standard Support</List.Item>
                     </List>
 
-                    <form method="POST">
+                    <Form method="post">
                       <input type="hidden" name="plan" value="FREE" />
                       <Button
                         variant="primary"
@@ -140,7 +140,7 @@ export default function SettingsPage() {
                       >
                         {currentPlan === 'FREE' ? 'Current Plan' : 'Downgrade to Free'}
                       </Button>
-                    </form>
+                    </Form>
                   </BlockStack>
                 </Box>
               </Card>
@@ -168,7 +168,7 @@ export default function SettingsPage() {
                       <List.Item>Priority Support</List.Item>
                     </List>
 
-                    <form method="POST">
+                    <Form method="post">
                       <input type="hidden" name="plan" value="PRO" />
                       <Button
                         variant="primary"
@@ -178,7 +178,7 @@ export default function SettingsPage() {
                       >
                         {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
                       </Button>
-                    </form>
+                    </Form>
                   </BlockStack>
                 </Box>
               </Card>
@@ -202,7 +202,7 @@ export default function SettingsPage() {
                       <List.Item>1-on-1 Setup Assistance</List.Item>
                     </List>
 
-                    <form method="POST">
+                    <Form method="post">
                       <input type="hidden" name="plan" value="ENTERPRISE" />
                       <Button
                         variant="primary"
@@ -212,7 +212,7 @@ export default function SettingsPage() {
                       >
                         {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
                       </Button>
-                    </form>
+                    </Form>
                   </BlockStack>
                 </Box>
               </Card>
