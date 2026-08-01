@@ -11,37 +11,7 @@ import prisma from "./db.server";
 export const PLAN_PRO = 'Pro Plan ($9.99/mo)';
 export const PLAN_ENTERPRISE = 'Enterprise Plan ($29.99/mo)';
 
-// Fallback in-memory storage for Vercel serverless environments
-class MemorySessionStorage {
-  private sessions = new Map<string, any>();
-
-  async storeSession(session: any): Promise<boolean> {
-    this.sessions.set(session.id, session);
-    return true;
-  }
-
-  async loadSession(id: string): Promise<any> {
-    return this.sessions.get(id);
-  }
-
-  async deleteSession(id: string): Promise<boolean> {
-    this.sessions.delete(id);
-    return true;
-  }
-
-  async deleteSessions(ids: string[]): Promise<boolean> {
-    ids.forEach((id) => this.sessions.delete(id));
-    return true;
-  }
-
-  async findSessionsByShop(shop: string): Promise<any[]> {
-    return Array.from(this.sessions.values()).filter((s) => s.shop === shop);
-  }
-}
-
-const storage = process.env.VERCEL
-  ? new MemorySessionStorage()
-  : new PrismaSessionStorage(prisma);
+const storage = new PrismaSessionStorage(prisma);
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
