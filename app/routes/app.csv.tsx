@@ -15,8 +15,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const productsWithMaps = [];
   for (const prod of catalog.products) {
     const fullData = await getProductGalleryMap(admin, prod.id);
-    if (fullData) {
-      productsWithMaps.push({ product: fullData.product, galleryMap: fullData.galleryMap });
+    if (fullData && fullData.galleryMap) {
+      const hasGroupMedia = Object.values(fullData.galleryMap.groups || {}).some((g: any) => g.mediaIds && g.mediaIds.length > 0);
+      const hasSharedMedia = fullData.galleryMap.sharedMediaIds && fullData.galleryMap.sharedMediaIds.length > 0;
+      
+      if (hasGroupMedia || hasSharedMedia) {
+        productsWithMaps.push({ product: fullData.product, galleryMap: fullData.galleryMap });
+      }
     }
   }
 
@@ -42,6 +47,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await saveProductGalleryMap(admin, productId, galleryMap, true);
     return { success: true };
   } catch (error: any) {
+    if (error.message?.includes('Product not found') || error.message?.includes('invalid')) {
+      return { success: false, error: 'Product not found on this store' };
+    }
     return { success: false, error: error.message };
   }
 };
@@ -212,17 +220,22 @@ export default function CSVPage() {
             signal: controller.signal
           });
           
-          const result = await res.json();
-          if (result.success) {
-            successes++;
-          } else {
+          if (!res.ok) {
             failures++;
-            errors.push(`Product ${productId}: ${result.error}`);
+            errors.push(`Product ${productId}: Server Error (${res.status})`);
+          } else {
+            const result = await res.json();
+            if (result.success) {
+              successes++;
+            } else {
+              failures++;
+              errors.push(`Product ${productId}: ${result.error}`);
+            }
           }
         } catch (e: any) {
           if (e.name === 'AbortError') break;
           failures++;
-          errors.push(`Product ${productId}: Network/Timeout error`);
+          errors.push(`Product ${productId}: Network Error or Timeout`);
         }
         
         setProgress(prev => prev + 1);

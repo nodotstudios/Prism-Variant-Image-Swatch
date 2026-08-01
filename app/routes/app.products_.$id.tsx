@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from 'react-router';
-import { useLoaderData, useSubmit, useNavigation, useActionData } from 'react-router';
+import { useLoaderData, useFetcher, useActionData, useNavigation } from 'react-router';
 import { Page, Layout, Card, BlockStack, Text, Button, Checkbox, InlineGrid, Badge, Thumbnail, Banner, Divider, Box, InlineStack, Toast, Frame } from '@shopify/polaris';
 import { useState, useEffect } from 'react';
 import { authenticate } from '~/shopify.server';
@@ -39,18 +39,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
 export default function SingleProductMapper() {
   const { data } = useLoaderData<typeof loader>();
-  const actionData = useActionData<{ success?: boolean; error?: string }>();
-  const submit = useSubmit();
-  const navigation = useNavigation();
-  const isSaving = navigation.state === 'submitting';
+  const fetcher = useFetcher<typeof action>();
+  const isSaving = fetcher.state === 'submitting';
 
   const [toastActive, setToastActive] = useState(false);
 
   useEffect(() => {
-    if (actionData?.success) {
+    if (fetcher.data?.success) {
       setToastActive(true);
     }
-  }, [actionData]);
+  }, [fetcher.data]);
 
   const { product, galleryMap: initialMap, enabled: initialEnabled } = data;
 
@@ -162,7 +160,7 @@ export default function SingleProductMapper() {
     formData.set('galleryMap', JSON.stringify(finalMap));
     formData.set('enabled', enabled ? 'true' : 'false');
 
-    submit(formData, { method: 'post' });
+    fetcher.submit(formData, { method: 'post' });
   };
 
   return (

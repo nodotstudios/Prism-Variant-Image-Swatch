@@ -84,7 +84,9 @@ export async function getProductsCatalog(admin: any, options: ProductFilterOptio
     if (node.galleryMapMetafield?.value) {
       try {
         const parsed = JSON.parse(node.galleryMapMetafield.value);
-        isConfigured = Object.keys(parsed.groups || {}).length > 0;
+        const hasGroupMedia = Object.values(parsed.groups || {}).some((g: any) => g.mediaIds && g.mediaIds.length > 0);
+        const hasSharedMedia = parsed.sharedMediaIds && parsed.sharedMediaIds.length > 0;
+        isConfigured = hasGroupMedia || hasSharedMedia;
       } catch {
         isConfigured = false;
       }
