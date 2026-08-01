@@ -145,7 +145,7 @@ export default function SettingsPage() {
                       <List.Item>Priority Support</List.Item>
                     </List>
 
-                    <Form method="post">
+                    <form method="POST">
                       <input type="hidden" name="plan" value="PRO" />
                       <Button
                         variant="primary"
@@ -155,7 +155,7 @@ export default function SettingsPage() {
                       >
                         {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
                       </Button>
-                    </Form>
+                    </form>
                   </BlockStack>
                 </Box>
               </Card>
@@ -179,7 +179,7 @@ export default function SettingsPage() {
                       <List.Item>1-on-1 Setup Assistance</List.Item>
                     </List>
 
-                    <Form method="post">
+                    <form method="POST">
                       <input type="hidden" name="plan" value="ENTERPRISE" />
                       <Button
                         variant="primary"
@@ -189,7 +189,7 @@ export default function SettingsPage() {
                       >
                         {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
                       </Button>
-                    </Form>
+                    </form>
                   </BlockStack>
                 </Box>
               </Card>
