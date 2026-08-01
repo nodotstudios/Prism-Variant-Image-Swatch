@@ -196,16 +196,16 @@ export default function CSVPage() {
       let failures = 0;
       const errors: string[] = [];
 
+      let token = "";
+      if (window.shopify) {
+         token = await window.shopify.idToken();
+      }
+
       // Process sequentially to avoid rate limits and timeouts
       for (const [productId, payload] of productGroups.entries()) {
         if (controller.signal.aborted) break;
         
         try {
-          let token = "";
-          if (window.shopify) {
-             token = await window.shopify.idToken();
-          }
-
           const formData = new URLSearchParams();
           formData.append('productId', productId);
           formData.append('galleryMap', JSON.stringify(payload));
@@ -235,7 +235,7 @@ export default function CSVPage() {
         } catch (e: any) {
           if (e.name === 'AbortError') break;
           failures++;
-          errors.push(`Product ${productId}: Network Error or Timeout`);
+          errors.push(`Product ${productId}: ${e.message || 'Network Error'}`);
         }
         
         setProgress(prev => prev + 1);
