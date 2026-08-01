@@ -51,7 +51,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const apiKey = process.env.SHOPIFY_API_KEY || "b524766caf5859eb3910305d16617068";
   const returnUrl = `https://${session.shop}/admin/apps/${apiKey}/app/settings`;
 
-  // Upgrades are now handled via GET /app/upgrade
+  if (planToSubscribe === 'PRO' || planToSubscribe === 'ENTERPRISE') {
+    const plan = planToSubscribe === 'PRO' ? PLAN_PRO : PLAN_ENTERPRISE;
+    const response = await billing.request({
+      plan,
+      isTest: true,
+      returnUrl,
+    });
+    const redirectUrl = response.headers.get("X-Shopify-API-Request-Failure-Reauthorize-Url") || response.headers.get("Location");
+    return { redirectUrl };
+  }
 
   if (planToSubscribe === 'FREE') {
     try {
@@ -76,8 +85,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function SettingsPage() {
   const { currentPlan } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<any>();
 
+  useEffect(() => {
+    if (actionData?.redirectUrl) {
+      if (typeof open !== 'undefined') {
+        open(actionData.redirectUrl, '_top');
+      }
+    }
+  }, [actionData]);
+
+  const [toastActive, setToastActive] = useState(false);
   const [fallbackMode, setFallbackMode] = useState(['show_all']);
   const [sharedPosition, setSharedPosition] = useState(['after']);
 
@@ -154,14 +172,17 @@ export default function SettingsPage() {
                       <List.Item>Priority Support</List.Item>
                     </List>
 
-                    <Button
-                      variant="primary"
-                      disabled={currentPlan === 'PRO'}
-                      fullWidth
-                      url={currentPlan !== 'PRO' ? "/app/upgrade?plan=PRO" : undefined}
-                    >
-                      {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
-                    </Button>
+                    <Form method="post">
+                      <input type="hidden" name="plan" value="PRO" />
+                      <Button
+                        variant="primary"
+                        submit
+                        disabled={currentPlan === 'PRO'}
+                        fullWidth
+                      >
+                        {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
+                      </Button>
+                    </Form>
                   </BlockStack>
                 </Box>
               </Card>
@@ -185,14 +206,17 @@ export default function SettingsPage() {
                       <List.Item>1-on-1 Setup Assistance</List.Item>
                     </List>
 
-                    <Button
-                      variant="primary"
-                      disabled={currentPlan === 'ENTERPRISE'}
-                      fullWidth
-                      url={currentPlan !== 'ENTERPRISE' ? "/app/upgrade?plan=ENTERPRISE" : undefined}
-                    >
-                      {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
-                    </Button>
+                    <Form method="post">
+                      <input type="hidden" name="plan" value="ENTERPRISE" />
+                      <Button
+                        variant="primary"
+                        submit
+                        disabled={currentPlan === 'ENTERPRISE'}
+                        fullWidth
+                      >
+                        {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
+                      </Button>
+                    </Form>
                   </BlockStack>
                 </Box>
               </Card>
