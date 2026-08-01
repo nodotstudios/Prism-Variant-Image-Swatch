@@ -197,15 +197,26 @@ export default function CSVPage() {
       const errors: string[] = [];
 
       let token = "";
-      if (window.shopify) {
-         token = await window.shopify.idToken();
-      }
+      let tokenTime = 0;
+      
+      const getToken = async () => {
+        if (!window.shopify) return "";
+        // Refresh token every 45 seconds to prevent expiration (HTML redirect)
+        // but cache it to prevent rate limiting (Network Error)
+        if (Date.now() - tokenTime > 45000) {
+          token = await window.shopify.idToken();
+          tokenTime = Date.now();
+        }
+        return token;
+      };
 
       // Process sequentially to avoid rate limits and timeouts
       for (const [productId, payload] of productGroups.entries()) {
         if (controller.signal.aborted) break;
         
         try {
+          const currentToken = await getToken();
+          
           const formData = new URLSearchParams();
           formData.append('productId', productId);
           formData.append('galleryMap', JSON.stringify(payload));
@@ -213,12 +224,20 @@ export default function CSVPage() {
           const res = await fetch('/app/csv', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${token}`,
+              'Authorization': `Bearer ${currentToken}`,
               'Content-Type': 'application/x-www-form-urlencoded'
             },
             body: formData,
             signal: controller.signal
           });
+          
+          // Detect if Shopify threw an HTML OAuth redirect instead of a JSON response
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("text/html")) {
+            failures++;
+            errors.push(`Product ${productId}: Authentication Session Expired. Please reload the page.`);
+            break; // Stop the loop since auth is dead
+          }
           
           if (!res.ok) {
             failures++;
