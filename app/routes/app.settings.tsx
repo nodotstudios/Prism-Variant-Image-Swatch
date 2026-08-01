@@ -86,14 +86,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function SettingsPage() {
   const { currentPlan } = useLoaderData<typeof loader>();
   const actionData = useActionData<any>();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (actionData?.redirectUrl) {
-      if (typeof open !== 'undefined') {
-        open(actionData.redirectUrl, '_top');
+  const handleManualUpgrade = async (plan: string) => {
+    setLoadingPlan(plan);
+    try {
+      let token = "";
+      if (window.shopify) {
+        token = await window.shopify.idToken();
       }
+      
+      const formData = new URLSearchParams();
+      formData.append('plan', plan);
+
+      const response = await fetch('/app/settings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      if (data.redirectUrl && typeof open !== 'undefined') {
+        open(data.redirectUrl, '_top');
+      } else if (plan === 'FREE') {
+        window.location.reload();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingPlan(null);
     }
-  }, [actionData]);
+  };
 
   const [toastActive, setToastActive] = useState(false);
   const [fallbackMode, setFallbackMode] = useState(['show_all']);
@@ -134,17 +160,15 @@ export default function SettingsPage() {
                       <List.Item>Standard Support</List.Item>
                     </List>
 
-                    <Form method="post">
-                      <input type="hidden" name="plan" value="FREE" />
-                      <Button
-                        variant="primary"
-                        submit
-                        disabled={currentPlan === 'FREE'}
-                        fullWidth
-                      >
-                        {currentPlan === 'FREE' ? 'Current Plan' : 'Downgrade to Free'}
-                      </Button>
-                    </Form>
+                    <Button
+                      variant="primary"
+                      onClick={() => handleManualUpgrade('FREE')}
+                      disabled={currentPlan === 'FREE'}
+                      loading={loadingPlan === 'FREE'}
+                      fullWidth
+                    >
+                      {currentPlan === 'FREE' ? 'Current Plan' : 'Downgrade to Free'}
+                    </Button>
                   </BlockStack>
                 </Box>
               </Card>
@@ -172,17 +196,15 @@ export default function SettingsPage() {
                       <List.Item>Priority Support</List.Item>
                     </List>
 
-                    <Form method="post">
-                      <input type="hidden" name="plan" value="PRO" />
-                      <Button
-                        variant="primary"
-                        submit
-                        disabled={currentPlan === 'PRO'}
-                        fullWidth
-                      >
-                        {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
-                      </Button>
-                    </Form>
+                    <Button
+                      variant="primary"
+                      onClick={() => handleManualUpgrade('PRO')}
+                      disabled={currentPlan === 'PRO'}
+                      loading={loadingPlan === 'PRO'}
+                      fullWidth
+                    >
+                      {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
+                    </Button>
                   </BlockStack>
                 </Box>
               </Card>
@@ -206,17 +228,15 @@ export default function SettingsPage() {
                       <List.Item>1-on-1 Setup Assistance</List.Item>
                     </List>
 
-                    <Form method="post">
-                      <input type="hidden" name="plan" value="ENTERPRISE" />
-                      <Button
-                        variant="primary"
-                        submit
-                        disabled={currentPlan === 'ENTERPRISE'}
-                        fullWidth
-                      >
-                        {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
-                      </Button>
-                    </Form>
+                    <Button
+                      variant="primary"
+                      onClick={() => handleManualUpgrade('ENTERPRISE')}
+                      disabled={currentPlan === 'ENTERPRISE'}
+                      loading={loadingPlan === 'ENTERPRISE'}
+                      fullWidth
+                    >
+                      {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
+                    </Button>
                   </BlockStack>
                 </Box>
               </Card>
