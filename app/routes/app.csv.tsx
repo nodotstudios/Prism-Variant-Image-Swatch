@@ -116,7 +116,7 @@ export default function CSVPage() {
     [],
   );
 
-  const removeUn-escapedPrefixes = (str: string) => {
+  const removeUnescapedPrefixes = (str: string) => {
     if (str.startsWith("'") && (str.length > 1) && ['=', '+', '-', '@'].includes(str[1])) {
       return str.substring(1);
     }
@@ -148,15 +148,15 @@ export default function CSVPage() {
       for (const row of rows) {
         if (row.length < 9) continue;
         
-        const productId = removeUn-escapedPrefixes(row[1]);
+        const productId = removeUnescapedPrefixes(row[1]);
         if (!productId || !productId.startsWith('gid://shopify/Product/')) continue;
         
-        const visualOptsStr = removeUn-escapedPrefixes(row[2]);
-        const variantId = removeUn-escapedPrefixes(row[3]);
-        const groupKey = removeUn-escapedPrefixes(row[5]);
-        const groupLabel = removeUn-escapedPrefixes(row[6]);
-        const mediaIdsStr = removeUn-escapedPrefixes(row[7]);
-        const sharedMediaStr = removeUn-escapedPrefixes(row[8]);
+        const visualOptsStr = removeUnescapedPrefixes(row[2]);
+        const variantId = removeUnescapedPrefixes(row[3]);
+        const groupKey = removeUnescapedPrefixes(row[5]);
+        const groupLabel = removeUnescapedPrefixes(row[6]);
+        const mediaIdsStr = removeUnescapedPrefixes(row[7]);
+        const sharedMediaStr = removeUnescapedPrefixes(row[8]);
         
         if (!productGroups.has(productId)) {
           productGroups.set(productId, {
