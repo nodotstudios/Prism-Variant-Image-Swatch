@@ -51,21 +51,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const apiKey = process.env.SHOPIFY_API_KEY || "b524766caf5859eb3910305d16617068";
   const returnUrl = `https://${session.shop}/admin/apps/${apiKey}/app/settings`;
 
-  if (planToSubscribe === 'PRO') {
-    return await billing.request({
-      plan: PLAN_PRO,
-      isTest: true,
-      returnUrl,
-    });
-  }
-
-  if (planToSubscribe === 'ENTERPRISE') {
-    return await billing.request({
-      plan: PLAN_ENTERPRISE,
-      isTest: true,
-      returnUrl,
-    });
-  }
+  // Upgrades are now handled via GET /app/upgrade
 
   if (planToSubscribe === 'FREE') {
     try {
@@ -168,17 +154,14 @@ export default function SettingsPage() {
                       <List.Item>Priority Support</List.Item>
                     </List>
 
-                    <Form method="post">
-                      <input type="hidden" name="plan" value="PRO" />
-                      <Button
-                        variant="primary"
-                        submit
-                        disabled={currentPlan === 'PRO'}
-                        fullWidth
-                      >
-                        {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
-                      </Button>
-                    </Form>
+                    <Button
+                      variant="primary"
+                      disabled={currentPlan === 'PRO'}
+                      fullWidth
+                      url={currentPlan !== 'PRO' ? "/app/upgrade?plan=PRO" : undefined}
+                    >
+                      {currentPlan === 'PRO' ? 'Current Plan' : 'Upgrade to Pro'}
+                    </Button>
                   </BlockStack>
                 </Box>
               </Card>
@@ -202,17 +185,14 @@ export default function SettingsPage() {
                       <List.Item>1-on-1 Setup Assistance</List.Item>
                     </List>
 
-                    <Form method="post">
-                      <input type="hidden" name="plan" value="ENTERPRISE" />
-                      <Button
-                        variant="primary"
-                        submit
-                        disabled={currentPlan === 'ENTERPRISE'}
-                        fullWidth
-                      >
-                        {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
-                      </Button>
-                    </Form>
+                    <Button
+                      variant="primary"
+                      disabled={currentPlan === 'ENTERPRISE'}
+                      fullWidth
+                      url={currentPlan !== 'ENTERPRISE' ? "/app/upgrade?plan=ENTERPRISE" : undefined}
+                    >
+                      {currentPlan === 'ENTERPRISE' ? 'Current Plan' : 'Upgrade to Enterprise'}
+                    </Button>
                   </BlockStack>
                 </Box>
               </Card>
