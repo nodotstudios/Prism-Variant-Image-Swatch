@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from 'react-router';
-import { useLoaderData, useSubmit, Form } from 'react-router';
+import { useLoaderData, useFetcher } from 'react-router';
 import { Page, Layout, Card, BlockStack, Text, Button, Banner, DropZone, ProgressBar, InlineStack, Badge, Box, Divider, List } from '@shopify/polaris';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { authenticate } from '../shopify.server';
 import { getProductsCatalog } from '~/services/graphql.server';
 import { getProductGalleryMap, saveProductGalleryMap } from '~/services/metafields.server';
@@ -103,7 +103,55 @@ export default function CSVPage() {
   const [progress, setProgress] = useState(0);
   const [total, setTotal] = useState(0);
   const [report, setReport] = useState<{ successes: number; failures: number; errors: string[] } | null>(null);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  
+  const fetcher = useFetcher<{ success?: boolean; error?: string }>();
+  const [importQueue, setImportQueue] = useState<[string, any][]>([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
+  const [successes, setSuccesses] = useState(0);
+  const [failures, setFailures] = useState(0);
+  const [errors, setErrors] = useState<string[]>([]);
+  const lastProcessedIndex = useRef(-1);
+  const [abortRequested, setAbortRequested] = useState(false);
+
+  useEffect(() => {
+    if (!importing) return;
+    
+    if (fetcher.state === 'idle' && currentIndex > 0 && lastProcessedIndex.current !== currentIndex - 1) {
+      lastProcessedIndex.current = currentIndex - 1;
+      
+      if (fetcher.data?.success) {
+        setSuccesses(s => s + 1);
+      } else {
+        setFailures(f => f + 1);
+        const pid = importQueue[currentIndex - 1][0];
+        setErrors(e => [...e, `Product ${pid}: ${fetcher.data?.error || 'Server Error'}`]);
+      }
+      
+      setProgress(currentIndex);
+    }
+
+    if (fetcher.state === 'idle' && lastProcessedIndex.current === currentIndex - 1) {
+      if (abortRequested) {
+        setImporting(false);
+        setReport({ successes, failures, errors });
+        return;
+      }
+      
+      if (currentIndex < importQueue.length) {
+        const [productId, payload] = importQueue[currentIndex];
+        const formData = new FormData();
+        formData.set('productId', productId);
+        formData.set('galleryMap', JSON.stringify(payload));
+        
+        fetcher.submit(formData, { method: 'post' });
+        
+        setCurrentIndex(c => c + 1);
+      } else {
+        setImporting(false);
+        setReport({ successes, failures, errors });
+      }
+    }
+  }, [fetcher.state, fetcher.data, currentIndex, importing, importQueue, abortRequested, successes, failures, errors]);
 
   const handleDownloadCSV = () => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -192,93 +240,22 @@ export default function CSVPage() {
       const totalProducts = productGroups.size;
       setTotal(totalProducts);
       
-      let successes = 0;
-      let failures = 0;
-      const errors: string[] = [];
-
-      let token = "";
-      let tokenTime = 0;
+      setSuccesses(0);
+      setFailures(0);
+      setErrors([]);
+      lastProcessedIndex.current = -1;
       
-      const getToken = async () => {
-        if (!window.shopify) return "";
-        // Refresh token every 45 seconds to prevent expiration (HTML redirect)
-        // but cache it to prevent rate limiting (Network Error)
-        if (Date.now() - tokenTime > 45000) {
-          token = await window.shopify.idToken();
-          tokenTime = Date.now();
-        }
-        return token;
-      };
-
-      // Process sequentially to avoid rate limits and timeouts
-      for (const [productId, payload] of productGroups.entries()) {
-        if (controller.signal.aborted) break;
-        
-        try {
-          const currentToken = await getToken();
-          
-          const formData = new URLSearchParams();
-          formData.append('productId', productId);
-          formData.append('galleryMap', JSON.stringify(payload));
-
-          const res = await fetch('/app/csv', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${currentToken}`,
-              'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: formData,
-            signal: controller.signal
-          });
-          
-          // Detect if Shopify threw an HTML OAuth redirect instead of a JSON response
-          const contentType = res.headers.get("content-type");
-          if (contentType && contentType.includes("text/html")) {
-            failures++;
-            errors.push(`Product ${productId}: Server Error (Received HTML page. Status: ${res.status})`);
-            continue; // Keep going! Don't break the loop on a random HTML boundary
-          }
-          
-          if (!res.ok) {
-            failures++;
-            errors.push(`Product ${productId}: Server Error (${res.status})`);
-          } else {
-            const result = await res.json();
-            if (result.success) {
-              successes++;
-            } else {
-              failures++;
-              errors.push(`Product ${productId}: ${result.error}`);
-            }
-          }
-        } catch (e: any) {
-          if (e.name === 'AbortError') break;
-          failures++;
-          errors.push(`Product ${productId}: ${e.message || 'Network Error'}`);
-        }
-        
-        setProgress(prev => prev + 1);
-        
-        // Add a small 500ms delay to prevent Shopify/Vercel rate-limiting on large CSVs
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-      
-      if (!controller.signal.aborted) {
-        setReport({ successes, failures, errors });
-      }
+      setImportQueue(Array.from(productGroups.entries()));
+      setCurrentIndex(0);
 
     } catch (e: any) {
-      setReport({ successes: 0, failures: 1, errors: [e.message] });
-    } finally {
       setImporting(false);
-      setAbortController(null);
+      setReport({ successes: 0, failures: 1, errors: [e.message] });
     }
   };
 
   const cancelImport = () => {
-    if (abortController) {
-      abortController.abort();
-    }
+    setAbortRequested(true);
   };
 
   return (
