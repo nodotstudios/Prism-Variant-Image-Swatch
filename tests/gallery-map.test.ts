@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateGroupKey, validateGalleryMap, createEmptyGalleryMap } from '../app/models/gallery-map.schema';
 import { sanitizeCSVCell, generateCSVExport } from '../app/services/csv.server';
+import { parseCSVImport } from '../app/services/csv-import';
 import { applyBulkRulesToProduct, BulkRule } from '../app/services/bulk-rules.server';
 
 describe('GalleryMap Schema & Utilities', () => {
@@ -53,6 +54,40 @@ describe('CSV Security & Sanitization', () => {
     expect(csv).toContain('Product Handle');
     expect(csv).toContain('"cupid-oval"');
     expect(csv).toContain('"platinum-petal"');
+  });
+
+  it('should round-trip an exported product into a valid gallery map', () => {
+    const mockMap = createEmptyGalleryMap('gid://shopify/Product/123');
+    mockMap.visualOptionNames = ['Color', 'Band Style'];
+    mockMap.sharedMediaIds = ['gid://shopify/MediaImage/100'];
+    mockMap.groups['platinum-petal'] = {
+      label: 'Platinum / Petal',
+      mediaIds: ['gid://shopify/MediaImage/101'],
+    };
+    mockMap.variantToGroup['gid://shopify/ProductVariant/201'] = 'platinum-petal';
+
+    const csv = generateCSVExport([{
+      product: {
+        id: 'gid://shopify/Product/123',
+        handle: 'cupid-oval',
+        variants: {
+          nodes: [{ id: 'gid://shopify/ProductVariant/201', title: 'Platinum / Petal / 6' }],
+        },
+      },
+      galleryMap: mockMap,
+    }]);
+
+    const entries = parseCSVImport(csv);
+    expect(entries).toHaveLength(1);
+
+    const [productId, importedMap] = entries[0];
+    expect(productId).toBe('gid://shopify/Product/123');
+    expect(validateGalleryMap(importedMap)).toBe(true);
+    expect(importedMap.productId).toBe(productId);
+    expect(importedMap.visualOptionNames).toEqual(['Color', 'Band Style']);
+    expect(importedMap.sharedMediaIds).toEqual(['gid://shopify/MediaImage/100']);
+    expect(importedMap.variantToGroup).toEqual(mockMap.variantToGroup);
+    expect(importedMap.groups).toEqual(mockMap.groups);
   });
 });
 

@@ -1,12 +1,13 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from 'react-router';
 import { useLoaderData, useFetcher } from 'react-router';
 import { Page, Layout, Card, BlockStack, Text, Button, Banner, DropZone, ProgressBar, InlineStack, Badge, Box, Divider, List } from '@shopify/polaris';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { authenticate } from '../shopify.server';
 import { getProductsCatalog } from '~/services/graphql.server';
 import { getProductGalleryMap, saveProductGalleryMap } from '~/services/metafields.server';
 import { generateCSVExport } from '~/services/csv.server';
-import { GalleryMapPayload } from '~/models/gallery-map.schema';
+import { parseCSVImport } from '~/services/csv-import';
+import { validateGalleryMap, type GalleryMapPayload } from '~/models/gallery-map.schema';
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -16,7 +17,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   for (const prod of catalog.products) {
     const fullData = await getProductGalleryMap(admin, prod.id);
     if (fullData && fullData.galleryMap) {
-      const hasGroupMedia = Object.values(fullData.galleryMap.groups || {}).some((g: any) => g.mediaIds && g.mediaIds.length > 0);
+      const hasGroupMedia = Object.values(fullData.galleryMap.groups || {}).some((group) => group.mediaIds.length > 0);
       const hasSharedMedia = fullData.galleryMap.sharedMediaIds && fullData.galleryMap.sharedMediaIds.length > 0;
       
       if (hasGroupMedia || hasSharedMedia) {
@@ -42,59 +43,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   
   try {
-    const galleryMap = JSON.parse(payloadStr);
+    const galleryMap: unknown = JSON.parse(payloadStr);
+    if (!validateGalleryMap(galleryMap) || galleryMap.productId !== productId) {
+      return { success: false, error: 'CSV contains an invalid product mapping' };
+    }
+
     // Auto-enable for products updated via CSV import
     await saveProductGalleryMap(admin, productId, galleryMap, true);
     return { success: true };
-  } catch (error: any) {
-    if (error.message?.includes('Product not found') || error.message?.includes('invalid')) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown server error';
+    if (message.includes('Product not found') || message.includes('invalid')) {
       return { success: false, error: 'Product not found on this store' };
     }
-    return { success: false, error: error.message };
+    return { success: false, error: message };
   }
 };
-
-function parseCSV(text: string) {
-  const rows: string[][] = [];
-  let currentRow: string[] = [];
-  let currentCell = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (inQuotes) {
-      if (char === '"' && text[i+1] === '"') {
-        currentCell += '"';
-        i++;
-      } else if (char === '"') {
-        inQuotes = false;
-      } else {
-        currentCell += char;
-      }
-    } else {
-      if (char === '"') {
-        inQuotes = true;
-      } else if (char === ',') {
-        currentRow.push(currentCell);
-        currentCell = '';
-      } else if (char === '\n' || char === '\r') {
-        if (char === '\r' && text[i+1] === '\n') i++;
-        currentRow.push(currentCell);
-        rows.push(currentRow);
-        currentRow = [];
-        currentCell = '';
-      } else {
-        currentCell += char;
-      }
-    }
-  }
-  if (currentCell || currentRow.length > 0) {
-    currentRow.push(currentCell);
-    rows.push(currentRow);
-  }
-  // Remove empty rows
-  return rows.filter(r => r.length > 1 || (r.length === 1 && r[0] !== ''));
-}
 
 export default function CSVPage() {
   const { csvContent, count } = useLoaderData<typeof loader>();
@@ -105,7 +69,7 @@ export default function CSVPage() {
   const [report, setReport] = useState<{ successes: number; failures: number; errors: string[] } | null>(null);
   
   const fetcher = useFetcher<{ success?: boolean; error?: string }>();
-  const [importQueue, setImportQueue] = useState<[string, any][]>([]);
+  const [importQueue, setImportQueue] = useState<[string, GalleryMapPayload][]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [successes, setSuccesses] = useState(0);
   const [failures, setFailures] = useState(0);
@@ -138,7 +102,7 @@ export default function CSVPage() {
       setImporting(false);
       setReport({ successes, failures, errors });
     }
-  }, [importing, isFetching, isDone, currentIndex, importQueue, abortRequested]);
+  }, [abortRequested, currentIndex, errors, failures, fetcher, importQueue, importing, isDone, isFetching, successes]);
 
   // Listen to fetcher state transitions
   useEffect(() => {
@@ -161,7 +125,7 @@ export default function CSVPage() {
       setHasStartedFetching(false);
       setIsFetching(false);
     }
-  }, [fetcher.state, fetcher.data, isFetching, hasStartedFetching]);
+  }, [currentIndex, fetcher.data, fetcher.state, hasStartedFetching, importQueue, isFetching]);
 
   const handleDownloadCSV = () => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -175,19 +139,12 @@ export default function CSVPage() {
   };
 
   const handleDropZoneDrop = useCallback(
-    (_dropFiles: File[], acceptedFiles: File[], _rejectedFiles: File[]) => {
+    (_dropFiles: File[], acceptedFiles: File[]) => {
       setFile(acceptedFiles[0]);
       setReport(null);
     },
     [],
   );
-
-  const removeUnescapedPrefixes = (str: string) => {
-    if (str.startsWith("'") && (str.length > 1) && ['=', '+', '-', '@'].includes(str[1])) {
-      return str.substring(1);
-    }
-    return str;
-  };
 
   const processImport = async () => {
     if (!file) return;
@@ -199,77 +156,32 @@ export default function CSVPage() {
     setIsFetching(false);
     setHasStartedFetching(false);
     setIsDone(false);
-    
-    const controller = new AbortController();
-    setAbortController(controller);
+    setTotal(0);
+    setImportQueue([]);
+    setCurrentIndex(-1);
+    setSuccesses(0);
+    setFailures(0);
+    setErrors([]);
 
     try {
       const text = await file.text();
-      const rows = parseCSV(text);
-      
-      // Skip header
-      if (rows.length > 0 && rows[0][0].includes('Product Handle')) {
-        rows.shift();
-      }
-
-      // Group by Product ID
-      const productGroups = new Map<string, GalleryMapPayload>();
-      
-      for (const row of rows) {
-        if (row.length < 9) continue;
-        
-        const productId = removeUnescapedPrefixes(row[1]);
-        if (!productId || !productId.startsWith('gid://shopify/Product/')) continue;
-        
-        const visualOptsStr = removeUnescapedPrefixes(row[2]);
-        const variantId = removeUnescapedPrefixes(row[3]);
-        const groupKey = removeUnescapedPrefixes(row[5]);
-        const groupLabel = removeUnescapedPrefixes(row[6]);
-        const mediaIdsStr = removeUnescapedPrefixes(row[7]);
-        const sharedMediaStr = removeUnescapedPrefixes(row[8]);
-        
-        if (!productGroups.has(productId)) {
-          productGroups.set(productId, {
-            visualOptionNames: visualOptsStr ? visualOptsStr.split(';').filter(Boolean) : [],
-            variantToGroup: {},
-            groups: {},
-            sharedMediaIds: sharedMediaStr ? sharedMediaStr.split(';').filter(Boolean) : []
-          });
-        }
-        
-        const payload = productGroups.get(productId)!;
-        
-        if (variantId && groupKey) {
-          payload.variantToGroup[variantId] = groupKey;
-        }
-        
-        if (groupKey) {
-          payload.groups[groupKey] = {
-            label: groupLabel || '',
-            mediaIds: mediaIdsStr ? mediaIdsStr.split(';').filter(Boolean) : []
-          };
-        }
-      }
-
-      const totalProducts = productGroups.size;
+      const queue = parseCSVImport(text);
+      const totalProducts = queue.length;
       setTotal(totalProducts);
-      
-      setSuccesses(0);
-      setFailures(0);
-      setErrors([]);
-      
-      setImportQueue(Array.from(productGroups.entries()));
-      setCurrentIndex(0);
+      setImportQueue(queue);
       
       if (totalProducts === 0) {
         setIsDone(true);
         setImporting(false);
         setReport({ successes: 0, failures: 0, errors: ['CSV contains no valid product mappings'] });
+      } else {
+        setCurrentIndex(0);
       }
 
-    } catch (e: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to read the CSV file';
       setImporting(false);
-      setReport({ successes: 0, failures: 1, errors: [e.message] });
+      setReport({ successes: 0, failures: 1, errors: [message] });
     }
   };
 
@@ -281,7 +193,7 @@ export default function CSVPage() {
     <Page title="CSV Import & Export" subtitle="Backup, bulk edit, or migrate variant media mappings using CSV spreadsheets">
       <BlockStack gap="500">
         <Banner title="CSV Format Specifications" tone="info">
-          <p>The import requires the exact same column format as the export. Uploading a CSV will automatically update mappings and enable the "Prism Variant Media" toggle for those products.</p>
+          <p>The import requires the exact same column format as the export. Uploading a CSV will automatically update mappings and enable the &quot;Prism Variant Media&quot; toggle for those products.</p>
         </Banner>
 
         <Layout>
@@ -340,8 +252,8 @@ export default function CSVPage() {
                       <BlockStack gap="300">
                         <Text as="h3" variant="headingMd">Import Report</Text>
                         <InlineStack gap="300">
-                          <Badge tone="success">{report.successes} Successful</Badge>
-                          <Badge tone={report.failures > 0 ? "critical" : "info"}>{report.failures} Failed</Badge>
+                          <Badge tone="success">{`${report.successes} Successful`}</Badge>
+                          <Badge tone={report.failures > 0 ? "critical" : "info"}>{`${report.failures} Failed`}</Badge>
                         </InlineStack>
                         
                         {report.errors.length > 0 && (
