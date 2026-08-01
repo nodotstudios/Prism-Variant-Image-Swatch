@@ -43,10 +43,12 @@ export default function SingleProductMapper() {
   const isSaving = fetcher.state === 'submitting';
 
   const [toastActive, setToastActive] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
     if (fetcher.data?.success) {
       setToastActive(true);
+      setIsClearing(false);
     }
   }, [fetcher.data]);
 
@@ -163,6 +165,26 @@ export default function SingleProductMapper() {
     fetcher.submit(formData, { method: 'post' });
   };
 
+  const handleUnconfigure = () => {
+    setIsClearing(true);
+    const emptyMap = {
+      visualOptionNames: [],
+      groups: {},
+      variantToGroup: {},
+      sharedMediaIds: []
+    };
+    
+    setGalleryMap(emptyMap);
+    setSelectedVisualOptions([]);
+    setEnabled(false);
+
+    const formData = new FormData();
+    formData.set('galleryMap', JSON.stringify(emptyMap));
+    formData.set('enabled', 'false');
+
+    fetcher.submit(formData, { method: 'post' });
+  };
+
   return (
     <Frame>
       <Page
@@ -173,6 +195,15 @@ export default function SingleProductMapper() {
           onAction: handleSave,
           loading: isSaving,
         }}
+        secondaryActions={[
+          {
+            content: 'Unconfigure (Clear All)',
+            destructive: true,
+            onAction: handleUnconfigure,
+            loading: isClearing,
+            disabled: isSaving
+          },
+        ]}
       >
         <BlockStack gap="500">
           <Banner title="Product Configuration">
