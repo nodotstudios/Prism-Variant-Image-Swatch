@@ -177,20 +177,6 @@ export default function SingleProductMapper() {
         }}
       >
         <BlockStack gap="500">
-          <Banner title="Ensure Theme App Embed is Active" tone="warning">
-            <p>
-              To filter product gallery images on your storefront, enable the <b>Prism Variant Media Embed</b> app embed in your Shopify Theme Editor!
-            </p>
-            <Box paddingBlockStart="200">
-              <Button
-                variant="primary"
-                onClick={() => window.open('https://admin.shopify.com/store/themes/current/editor?context=apps', '_blank')}
-              >
-                Open Theme Editor & Enable App Embed
-              </Button>
-            </Box>
-          </Banner>
-
           <Banner title="Product Configuration">
             <p>Select which options dictate media images & videos, then assign media items to each combination below.</p>
           </Banner>

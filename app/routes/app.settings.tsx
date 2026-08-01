@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
-import { Form, useActionData, useLoaderData } from 'react-router';
+import { Form, useActionData, useLoaderData, redirect } from 'react-router';
 import {
   Page,
   Layout,
@@ -67,7 +67,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  return { success: true };
+  if (planToSubscribe === 'FREE') {
+    try {
+      const checkResult = await billing.check({
+        plans: [PLAN_PRO, PLAN_ENTERPRISE],
+        isTest: true,
+      });
+      for (const sub of checkResult.appSubscriptions) {
+        await billing.cancel({
+          subscriptionId: sub.id,
+          isTest: true,
+          prorate: true,
+        });
+      }
+    } catch (e) {
+      // Ignore errors if no active subscription found
+    }
+  }
+
+  return redirect('/app/settings');
 };
 
 export default function SettingsPage() {
@@ -112,12 +130,17 @@ export default function SettingsPage() {
                       <List.Item>Standard Support</List.Item>
                     </List>
 
-                    <Button
-                      disabled={currentPlan === 'FREE'}
-                      fullWidth
-                    >
-                      {currentPlan === 'FREE' ? 'Current Plan' : 'Downgrade to Free'}
-                    </Button>
+                    <form method="POST">
+                      <input type="hidden" name="plan" value="FREE" />
+                      <Button
+                        variant="primary"
+                        submit
+                        disabled={currentPlan === 'FREE'}
+                        fullWidth
+                      >
+                        {currentPlan === 'FREE' ? 'Current Plan' : 'Downgrade to Free'}
+                      </Button>
+                    </form>
                   </BlockStack>
                 </Box>
               </Card>
