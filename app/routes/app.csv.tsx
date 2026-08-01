@@ -110,48 +110,58 @@ export default function CSVPage() {
   const [successes, setSuccesses] = useState(0);
   const [failures, setFailures] = useState(0);
   const [errors, setErrors] = useState<string[]>([]);
-  const lastProcessedIndex = useRef(-1);
+  const [isFetching, setIsFetching] = useState(false);
+  const [hasStartedFetching, setHasStartedFetching] = useState(false);
+  const [isDone, setIsDone] = useState(false);
   const [abortRequested, setAbortRequested] = useState(false);
 
+  // Trigger when we are ready to process the NEXT item
   useEffect(() => {
-    if (!importing) return;
+    if (!importing || isFetching || isDone) return;
     
-    if (fetcher.state === 'idle' && currentIndex > 0 && lastProcessedIndex.current !== currentIndex - 1) {
-      lastProcessedIndex.current = currentIndex - 1;
+    if (abortRequested) {
+      setImporting(false);
+      setReport({ successes, failures, errors });
+      return;
+    }
+
+    if (currentIndex < importQueue.length && importQueue.length > 0) {
+      const [productId, payload] = importQueue[currentIndex];
+      const formData = new FormData();
+      formData.set('productId', productId);
+      formData.set('galleryMap', JSON.stringify(payload));
       
+      setIsFetching(true);
+      fetcher.submit(formData, { method: 'post' });
+    } else if (currentIndex === importQueue.length && importQueue.length > 0) {
+      setIsDone(true);
+      setImporting(false);
+      setReport({ successes, failures, errors });
+    }
+  }, [importing, isFetching, isDone, currentIndex, importQueue, abortRequested]);
+
+  // Listen to fetcher state transitions
+  useEffect(() => {
+    if (isFetching && fetcher.state !== 'idle') {
+      setHasStartedFetching(true);
+    }
+    
+    if (isFetching && hasStartedFetching && fetcher.state === 'idle') {
+      // Fetcher just finished
       if (fetcher.data?.success) {
         setSuccesses(s => s + 1);
       } else {
         setFailures(f => f + 1);
-        const pid = importQueue[currentIndex - 1][0];
+        const pid = importQueue[currentIndex]?.[0] || 'Unknown';
         setErrors(e => [...e, `Product ${pid}: ${fetcher.data?.error || 'Server Error'}`]);
       }
       
-      setProgress(currentIndex);
+      setProgress(currentIndex + 1);
+      setCurrentIndex(c => c + 1);
+      setHasStartedFetching(false);
+      setIsFetching(false);
     }
-
-    if (fetcher.state === 'idle' && lastProcessedIndex.current === currentIndex - 1) {
-      if (abortRequested) {
-        setImporting(false);
-        setReport({ successes, failures, errors });
-        return;
-      }
-      
-      if (currentIndex < importQueue.length) {
-        const [productId, payload] = importQueue[currentIndex];
-        const formData = new FormData();
-        formData.set('productId', productId);
-        formData.set('galleryMap', JSON.stringify(payload));
-        
-        fetcher.submit(formData, { method: 'post' });
-        
-        setCurrentIndex(c => c + 1);
-      } else {
-        setImporting(false);
-        setReport({ successes, failures, errors });
-      }
-    }
-  }, [fetcher.state, fetcher.data, currentIndex, importing, importQueue, abortRequested, successes, failures, errors]);
+  }, [fetcher.state, fetcher.data, isFetching, hasStartedFetching]);
 
   const handleDownloadCSV = () => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -183,8 +193,12 @@ export default function CSVPage() {
     if (!file) return;
     
     setImporting(true);
-    setReport(null);
     setProgress(0);
+    setReport(null);
+    setAbortRequested(false);
+    setIsFetching(false);
+    setHasStartedFetching(false);
+    setIsDone(false);
     
     const controller = new AbortController();
     setAbortController(controller);
@@ -243,10 +257,15 @@ export default function CSVPage() {
       setSuccesses(0);
       setFailures(0);
       setErrors([]);
-      lastProcessedIndex.current = -1;
       
       setImportQueue(Array.from(productGroups.entries()));
       setCurrentIndex(0);
+      
+      if (totalProducts === 0) {
+        setIsDone(true);
+        setImporting(false);
+        setReport({ successes: 0, failures: 0, errors: ['CSV contains no valid product mappings'] });
+      }
 
     } catch (e: any) {
       setImporting(false);
