@@ -172,6 +172,8 @@ export async function getProductGalleryMap(admin: any, productId: string) {
   };
 }
 
+let definitionsEnsured = false;
+
 export async function saveProductGalleryMap(
   admin: any,
   productId: string,
@@ -179,7 +181,10 @@ export async function saveProductGalleryMap(
   enabled: boolean
 ) {
   // Ensure metafield definitions exist with storefront public access
-  await ensureMetafieldDefinitions(admin);
+  if (!definitionsEnsured) {
+    await ensureMetafieldDefinitions(admin);
+    definitionsEnsured = true;
+  }
 
   const mutation = `#graphql
     mutation SetProductMetafields($metafields: [MetafieldsSetInput!]!) {

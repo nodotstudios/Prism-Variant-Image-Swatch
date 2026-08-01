@@ -235,8 +235,13 @@ export default function CSVPage() {
           const contentType = res.headers.get("content-type");
           if (contentType && contentType.includes("text/html")) {
             failures++;
-            errors.push(`Product ${productId}: Authentication Session Expired. Please reload the page.`);
-            break; // Stop the loop since auth is dead
+            if (res.status === 200) {
+              errors.push(`Product ${productId}: Authentication Session Expired. Please reload the page.`);
+              break; // Stop the loop since auth is dead
+            } else {
+              errors.push(`Product ${productId}: Server Error (${res.status} HTML)`);
+              continue; // A 500 or 504 HTML error from Vercel/Remix, just skip to next
+            }
           }
           
           if (!res.ok) {
