@@ -235,13 +235,8 @@ export default function CSVPage() {
           const contentType = res.headers.get("content-type");
           if (contentType && contentType.includes("text/html")) {
             failures++;
-            if (res.status === 200) {
-              errors.push(`Product ${productId}: Authentication Session Expired. Please reload the page.`);
-              break; // Stop the loop since auth is dead
-            } else {
-              errors.push(`Product ${productId}: Server Error (${res.status} HTML)`);
-              continue; // A 500 or 504 HTML error from Vercel/Remix, just skip to next
-            }
+            errors.push(`Product ${productId}: Server Error (Received HTML page. Status: ${res.status})`);
+            continue; // Keep going! Don't break the loop on a random HTML boundary
           }
           
           if (!res.ok) {
@@ -263,6 +258,9 @@ export default function CSVPage() {
         }
         
         setProgress(prev => prev + 1);
+        
+        // Add a small 500ms delay to prevent Shopify/Vercel rate-limiting on large CSVs
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       
       if (!controller.signal.aborted) {
