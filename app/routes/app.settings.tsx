@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
-import { useFetcher, useLoaderData, useNavigation, useSubmit } from 'react-router';
+import { redirect, useFetcher, useLoaderData, useNavigation, useSubmit } from 'react-router';
 import {
   Badge,
   Banner,
@@ -78,6 +78,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   ).toString();
 
   if (planToSubscribe === 'PRO' || planToSubscribe === 'ENTERPRISE') {
+    // Return the response directly to the browser.
+    // Because we used a native <form method="POST">, the browser performs a full page reload,
+    // follows the redirect, and Shopify App Bridge intercepts it correctly!
     return billing.request({
       plan: planToSubscribe === 'PRO' ? PLAN_PRO : PLAN_ENTERPRISE,
       isTest: BILLING_TEST_MODE,
@@ -110,7 +113,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function SettingsPage() {
   const { currentPlan, settings, billingTestMode } = useLoaderData<typeof loader>();
   const settingsFetcher = useFetcher<typeof action>();
-  const submit = useSubmit();
   const navigation = useNavigation();
 
   const [fallbackMode, setFallbackMode] = useState<string[]>([settings.fallbackMode]);
@@ -118,13 +120,6 @@ export default function SettingsPage() {
   const [hideUnassignedMedia, setHideUnassignedMedia] = useState(settings.hideUnassignedMedia);
 
   const changingPlan = navigation.formData?.get('plan');
-
-  const changePlan = (plan: 'FREE' | 'PRO' | 'ENTERPRISE') => {
-    const formData = new FormData();
-    formData.set('intent', 'change_plan');
-    formData.set('plan', plan);
-    submit(formData, { method: 'post' });
-  };
 
   const saveSettings = () => {
     const formData = new FormData();
@@ -266,7 +261,6 @@ interface PlanCardProps {
   loading: boolean;
   actionLabel: string;
   features: string[];
-  onSelect: () => void;
   badge?: string;
 }
 
@@ -277,7 +271,6 @@ function PlanCard({
   loading,
   actionLabel,
   features,
-  onSelect,
   badge,
 }: PlanCardProps) {
   return (
@@ -297,15 +290,19 @@ function PlanCard({
             {features.map((feature) => <List.Item key={feature}>{feature}</List.Item>)}
           </List>
 
-          <Button
-            variant="primary"
-            onClick={onSelect}
-            disabled={active}
-            loading={loading}
-            fullWidth
-          >
-            {actionLabel}
-          </Button>
+          <form method="POST" action="">
+            <input type="hidden" name="intent" value="change_plan" />
+            <input type="hidden" name="plan" value={name} />
+            <Button
+              submit
+              variant="primary"
+              disabled={active}
+              loading={loading}
+              fullWidth
+            >
+              {actionLabel}
+            </Button>
+          </form>
         </BlockStack>
       </Box>
     </Card>
