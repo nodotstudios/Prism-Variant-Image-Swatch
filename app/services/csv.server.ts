@@ -1,4 +1,5 @@
-import { GalleryMapPayload } from '~/models/gallery-map.schema';
+import type { GalleryMapPayload } from '~/models/gallery-map.schema';
+import type { CSVExportProduct } from '~/types/product';
 
 export interface CSVRow {
   productHandle: string;
@@ -21,7 +22,9 @@ export function sanitizeCSVCell(cell: string): string {
   return str;
 }
 
-export function generateCSVExport(productsWithMaps: Array<{ product: any; galleryMap: GalleryMapPayload }>): string {
+export function generateCSVExport(
+  productsWithMaps: Array<{ product: CSVExportProduct; galleryMap: GalleryMapPayload }>,
+): string {
   const headers = [
     'Product Handle',
     'Product ID',

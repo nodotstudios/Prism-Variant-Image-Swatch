@@ -9,8 +9,12 @@ import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
+  const apiKey = process.env.SHOPIFY_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Response("SHOPIFY_API_KEY is not configured", { status: 500 });
+  }
 
-  return { apiKey: process.env.SHOPIFY_API_KEY || "b524766caf5859eb3910305d16617068" };
+  return { apiKey };
 };
 
 export default function App() {

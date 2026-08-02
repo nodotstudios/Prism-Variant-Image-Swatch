@@ -32,7 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   
   const productId = formData.get('productId') as string;
@@ -49,7 +49,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Auto-enable for products updated via CSV import
-    await saveProductGalleryMap(admin, productId, galleryMap, true);
+    await saveProductGalleryMap(admin, productId, galleryMap, true, { shop: session.shop });
     return { success: true };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown server error';

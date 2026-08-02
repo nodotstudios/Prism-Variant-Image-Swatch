@@ -1,4 +1,5 @@
 import { APP_CONFIG } from '~/config/app.config';
+import type { AdminGraphQLClient } from '~/types/shopify';
 
 export interface ProductFilterOptions {
   query?: string;
@@ -8,7 +9,47 @@ export interface ProductFilterOptions {
   after?: string;
 }
 
-export async function getProductsCatalog(admin: any, options: ProductFilterOptions = {}) {
+interface CatalogProductNode {
+  id: string;
+  title: string;
+  handle: string;
+  status: string;
+  vendor: string;
+  productType: string;
+  tags: string[];
+  featuredImage?: { url: string; altText?: string | null } | null;
+  variantsCount?: { count: number };
+  media?: { nodes?: Array<{ id: string }> };
+  galleryMapMetafield?: { id: string; value: string } | null;
+  enabledMetafield?: { id: string; value: string } | null;
+}
+
+interface CatalogResponse {
+  data?: {
+    products?: {
+      pageInfo: {
+        hasNextPage: boolean;
+        hasPreviousPage: boolean;
+        startCursor?: string | null;
+        endCursor?: string | null;
+      };
+      nodes: CatalogProductNode[];
+    };
+  };
+}
+
+interface DashboardResponse {
+  data?: {
+    products?: {
+      nodes: Array<{
+        id: string;
+        galleryMapMetafield?: { value: string } | null;
+      }>;
+    };
+  };
+}
+
+export async function getProductsCatalog(admin: AdminGraphQLClient, options: ProductFilterOptions = {}) {
   const { query = '', first = 25, after = null } = options;
 
   const gqlQuery = `#graphql
@@ -67,7 +108,7 @@ export async function getProductsCatalog(admin: any, options: ProductFilterOptio
     },
   });
 
-  const json = await response.json();
+  const json = (await response.json()) as CatalogResponse;
   const productsData = json.data?.products;
 
   if (!productsData) {
@@ -77,15 +118,21 @@ export async function getProductsCatalog(admin: any, options: ProductFilterOptio
     };
   }
 
-  const products = productsData.nodes.map((node: any) => {
+  const products = productsData.nodes.map((node) => {
     let isConfigured = false;
     let enabled = true;
 
     if (node.galleryMapMetafield?.value) {
       try {
         const parsed = JSON.parse(node.galleryMapMetafield.value);
-        const hasGroupMedia = Object.values(parsed.groups || {}).some((g: any) => g.mediaIds && g.mediaIds.length > 0);
-        const hasSharedMedia = parsed.sharedMediaIds && parsed.sharedMediaIds.length > 0;
+        const groups = parsed && typeof parsed === 'object' && 'groups' in parsed
+          ? (parsed.groups as Record<string, { mediaIds?: string[] }>)
+          : {};
+        const sharedMediaIds = parsed && typeof parsed === 'object' && 'sharedMediaIds' in parsed
+          ? parsed.sharedMediaIds
+          : [];
+        const hasGroupMedia = Object.values(groups).some((group) => (group.mediaIds?.length ?? 0) > 0);
+        const hasSharedMedia = Array.isArray(sharedMediaIds) && sharedMediaIds.length > 0;
         isConfigured = hasGroupMedia || hasSharedMedia;
       } catch {
         isConfigured = false;
@@ -118,7 +165,7 @@ export async function getProductsCatalog(admin: any, options: ProductFilterOptio
   };
 }
 
-export async function getDashboardStats(admin: any) {
+export async function getDashboardStats(admin: AdminGraphQLClient) {
   const gqlQuery = `#graphql
     query GetDashboardStats {
       products(first: 250) {
@@ -137,7 +184,7 @@ export async function getDashboardStats(admin: any) {
 
   try {
     const response = await admin.graphql(gqlQuery);
-    const json = await response.json();
+    const json = (await response.json()) as DashboardResponse;
     const nodes = json.data?.products?.nodes || [];
 
     const totalProducts = nodes.length;

@@ -1,10 +1,14 @@
 export const APP_CONFIG = {
   name: 'Prism Variant Image & Swatch',
   version: '1.0.0',
+  requiredScopes: ['read_products', 'write_products'] as const,
   metafields: {
     namespace: 'prism_variant_media',
     keyGalleryMap: 'gallery_map',
     keyEnabled: 'enabled',
+  },
+  themeExtension: {
+    blockHandle: 'gallery-embed',
   },
   plans: {
     FREE: {

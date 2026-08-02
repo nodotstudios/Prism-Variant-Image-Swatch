@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from 'react-router';
-import { useLoaderData, useNavigate, useSubmit, Link } from 'react-router';
+import { useLoaderData, useSubmit, useNavigate } from 'react-router';
 import { Page, Card, IndexTable, Text, Badge, TextField, Thumbnail, Button } from '@shopify/polaris';
 import { useState, useCallback } from 'react';
 import { authenticate } from '../shopify.server';
@@ -28,8 +28,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function ProductsPage() {
   const { catalog, query: initialQuery } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
   const submit = useSubmit();
+  const navigate = useNavigate();
 
   const [queryValue, setQueryValue] = useState(initialQuery);
 
@@ -74,9 +74,12 @@ export default function ProductsPage() {
             )}
           </IndexTable.Cell>
           <IndexTable.Cell>
-            <Link to={`/app/products/${rawId}`}>
-              <Button variant="primary">Edit Media Map</Button>
-            </Link>
+            <Button
+              variant="primary"
+              onClick={() => navigate(`/app/products/${rawId}`)}
+            >
+              Edit Media Map
+            </Button>
           </IndexTable.Cell>
         </IndexTable.Row>
       );
@@ -118,7 +121,7 @@ export default function ProductsPage() {
               onClick={() => {
                 const formData = new FormData();
                 if (queryValue) formData.set('query', queryValue);
-                formData.set('after', catalog.pageInfo.endCursor);
+                if (catalog.pageInfo.endCursor) formData.set('after', catalog.pageInfo.endCursor);
                 submit(formData, { method: 'get' });
               }}
             >

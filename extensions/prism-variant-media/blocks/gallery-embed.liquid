@@ -1,14 +1,22 @@
 {% if template.name == 'product' and product %}
   {% assign enabled_metafield = product.metafields.prism_variant_media.enabled %}
+  {% assign enabled_value = enabled_metafield.value %}
   {% assign gallery_map_metafield = product.metafields.prism_variant_media.gallery_map %}
+  {% assign app_settings_metafield = app.metafields.prism_variant_media.settings %}
 
-  {% if enabled_metafield == true or enabled_metafield == 'true' or enabled_metafield == nil %}
+  {% if enabled_metafield == blank or enabled_value == true or enabled_value == 'true' %}
     {% if gallery_map_metafield != blank %}
       <script id="prism-variant-media-data" type="application/json">
         {
           "productId": {{ product.id | json }},
           "selectedVariantId": {{ product.selected_or_first_available_variant.id | json }},
           "galleryMapRaw": {{ gallery_map_metafield.value | json }},
+          "globalSettings": {% if app_settings_metafield != blank %}{{ app_settings_metafield.value | json }}{% else %}null{% endif %},
+          "variantFeaturedMedia": {
+            {% for variant in product.variants %}
+              {{ variant.id | append: '' | json }}: {% if variant.featured_media %}{{ variant.featured_media.id | json }}{% else %}null{% endif %}{% unless forloop.last %},{% endunless %}
+            {% endfor %}
+          },
           "debug": {{ block.settings.enable_logging | default: false | json }}
         }
       </script>
@@ -19,8 +27,11 @@
 
 {% schema %}
 {
-  "name": "Prism Variant Swatches",
+  "name": "Prism Variant Media",
   "target": "body",
+  "enabled_on": {
+    "templates": ["product"]
+  },
   "settings": [
     {
       "type": "checkbox",

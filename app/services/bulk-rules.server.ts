@@ -1,4 +1,4 @@
-import { GalleryMapPayload, generateGroupKey } from '~/models/gallery-map.schema';
+import { generateGroupKey, type GalleryMapPayload } from '~/models/gallery-map.schema';
 
 export interface BulkRule {
   id: string;
@@ -17,13 +17,50 @@ export interface DryRunResult {
   previewPayload: GalleryMapPayload;
 }
 
+export interface BulkRuleProduct {
+  media?: {
+    nodes?: Array<{
+      id: string;
+      image?: { url: string } | null;
+      sources?: Array<{ url: string }>;
+      alt?: string | null;
+    }>;
+  };
+  variants?: {
+    nodes?: Array<{
+      id: string;
+      selectedOptions?: Array<{ name: string; value: string }>;
+    }>;
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function validateBulkRules(value: unknown): value is BulkRule[] {
+  return Array.isArray(value) && value.length > 0 && value.every((rule) => {
+    if (!isRecord(rule) || !isRecord(rule.optionValues)) return false;
+    return (
+      typeof rule.id === 'string' &&
+      (rule.patternType === 'filename' || rule.patternType === 'alt_text') &&
+      typeof rule.matchValue === 'string' &&
+      rule.matchValue.trim().length > 0 &&
+      typeof rule.targetGroupLabel === 'string' &&
+      Object.values(rule.optionValues).every((optionValue) => typeof optionValue === 'string') &&
+      (rule.isSharedMedia === undefined || typeof rule.isSharedMedia === 'boolean')
+    );
+  });
+}
+
 export function applyBulkRulesToProduct(
-  product: any,
+  product: BulkRuleProduct,
   currentGalleryMap: GalleryMapPayload,
   rules: BulkRule[]
 ): { updatedGalleryMap: GalleryMapPayload; matchedCount: number } {
   let matchedCount = 0;
   const newMap: GalleryMapPayload = JSON.parse(JSON.stringify(currentGalleryMap));
+  const matchedGroupOptions = new Map<string, Record<string, string>>();
 
   const mediaList = product.media?.nodes || [];
 
@@ -50,6 +87,7 @@ export function applyBulkRulesToProduct(
           }
         } else {
           const groupKey = generateGroupKey(rule.optionValues);
+          matchedGroupOptions.set(groupKey, rule.optionValues);
           if (!newMap.groups[groupKey]) {
             newMap.groups[groupKey] = {
               label: rule.targetGroupLabel || groupKey,
@@ -64,17 +102,26 @@ export function applyBulkRulesToProduct(
     }
   }
 
-  // Link variants matching the option values
+  const groupMatches = Array.from(matchedGroupOptions.entries()).sort(
+    ([, firstOptions], [, secondOptions]) =>
+      Object.keys(secondOptions).length - Object.keys(firstOptions).length,
+  );
+
+  // Link only variants whose selected option values satisfy a matched rule.
   for (const variant of product.variants?.nodes || []) {
-    const variantId = variant.id;
-    const selectedOptsMap: Record<string, string> = {};
+    const selectedOptions = new Map(
+      (variant.selectedOptions || []).map((option) => [option.name.toLowerCase(), option.value.toLowerCase()]),
+    );
 
-    for (const opt of variant.selectedOptions || []) {
-      selectedOptsMap[opt.name] = opt.value;
-    }
-
-    for (const groupKey of Object.keys(newMap.groups)) {
-      newMap.variantToGroup[variantId] = groupKey;
+    for (const [groupKey, requiredOptions] of groupMatches) {
+      const matches = Object.entries(requiredOptions).every(
+        ([optionName, optionValue]) =>
+          selectedOptions.get(optionName.toLowerCase()) === optionValue.toLowerCase(),
+      );
+      if (matches) {
+        newMap.variantToGroup[variant.id] = groupKey;
+        break;
+      }
     }
   }
 

@@ -1,10 +1,17 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from 'react-router';
-import { useLoaderData, useFetcher, useActionData, useNavigation } from 'react-router';
+import { useLoaderData, useFetcher, useNavigate } from 'react-router';
 import { Page, Layout, Card, BlockStack, Text, Button, Checkbox, InlineGrid, Badge, Thumbnail, Banner, Divider, Box, InlineStack, Toast, Frame } from '@shopify/polaris';
 import { useState, useEffect } from 'react';
 import { authenticate } from '~/shopify.server';
 import { getProductGalleryMap, saveProductGalleryMap } from '~/services/metafields.server';
-import { generateGroupKey, GalleryMapPayload } from '~/models/gallery-map.schema';
+import {
+  createEmptyGalleryMap,
+  generateGroupKey,
+  normalizeVisualOptionNames,
+  rebuildVariantToGroup,
+  validateGalleryMap,
+  type GalleryMapPayload,
+} from '~/models/gallery-map.schema';
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -19,7 +26,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const productId = `gid://shopify/Product/${params.id}`;
   const formData = await request.formData();
   const payloadStr = formData.get('galleryMap') as string;
@@ -29,44 +36,54 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return { success: false, error: 'Missing gallery map payload' };
   }
 
-  const galleryMap: GalleryMapPayload = JSON.parse(payloadStr);
-  const enabled = enabledStr === 'true';
+  try {
+    const galleryMap: unknown = JSON.parse(payloadStr);
+    if (!validateGalleryMap(galleryMap) || galleryMap.productId !== productId) {
+      return { success: false, error: 'Invalid gallery map payload' };
+    }
 
-  await saveProductGalleryMap(admin, productId, galleryMap, enabled);
-
-  return { success: true };
+    await saveProductGalleryMap(admin, productId, galleryMap, enabledStr === 'true', {
+      shop: session.shop,
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unable to save the gallery map',
+    };
+  }
 };
 
 export default function SingleProductMapper() {
   const { data } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const navigate = useNavigate();
   const isSaving = fetcher.state === 'submitting';
 
   const [toastActive, setToastActive] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
-    if (fetcher.data?.success) {
-      setToastActive(true);
-      setIsClearing(false);
-    }
+    if (!fetcher.data) return;
+    setIsClearing(false);
+    if (fetcher.data.success) setToastActive(true);
   }, [fetcher.data]);
 
   const { product, galleryMap: initialMap, enabled: initialEnabled } = data;
 
   const [enabled, setEnabled] = useState(initialEnabled);
-  const [selectedVisualOptions, setSelectedVisualOptions] = useState<string[]>(
-    initialMap.visualOptionNames.length > 0
-      ? initialMap.visualOptionNames
-      : product.options.map((o: any) => o.name).filter((n: string) => !['Size', 'Length', 'Quantity'].includes(n))
+  const [selectedVisualOptions, setSelectedVisualOptions] = useState<string[]>(() =>
+    normalizeVisualOptionNames(
+      initialMap.visualOptionNames,
+      product.options.map((option) => option.name),
+    ),
   );
 
   const [galleryMap, setGalleryMap] = useState<GalleryMapPayload>(initialMap);
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
 
   const generateCombinations = () => {
-    const visualOptions = product.options.filter((o: any) => selectedVisualOptions.includes(o.name));
-    if (visualOptions.length === 0) return {};
+    if (selectedVisualOptions.length === 0) return {};
 
     const combinations: Record<string, { label: string; variantIds: string[] }> = {};
 
@@ -95,9 +112,12 @@ export default function SingleProductMapper() {
 
   const combinations = generateCombinations();
   const combinationKeys = Object.keys(combinations);
-  const currentActiveKey = activeGroupKey || combinationKeys[0] || null;
+  const currentActiveKey = activeGroupKey && combinations[activeGroupKey]
+    ? activeGroupKey
+    : combinationKeys[0] || null;
 
   const handleToggleOption = (optionName: string) => {
+    setActiveGroupKey(null);
     if (selectedVisualOptions.includes(optionName)) {
       setSelectedVisualOptions(selectedVisualOptions.filter((o) => o !== optionName));
     } else {
@@ -153,9 +173,16 @@ export default function SingleProductMapper() {
   };
 
   const handleSave = () => {
+    const currentGroups = Object.fromEntries(
+      combinationKeys
+        .filter((groupKey) => Boolean(galleryMap.groups[groupKey]))
+        .map((groupKey) => [groupKey, galleryMap.groups[groupKey]]),
+    );
     const finalMap = {
       ...galleryMap,
       visualOptionNames: selectedVisualOptions,
+      groups: currentGroups,
+      variantToGroup: rebuildVariantToGroup(combinations, currentGroups),
     };
 
     const formData = new FormData();
@@ -167,12 +194,8 @@ export default function SingleProductMapper() {
 
   const handleUnconfigure = () => {
     setIsClearing(true);
-    const emptyMap = {
-      visualOptionNames: [],
-      groups: {},
-      variantToGroup: {},
-      sharedMediaIds: []
-    };
+    const emptyMap = createEmptyGalleryMap(product.id);
+    emptyMap.visualOptionNames = [];
     
     setGalleryMap(emptyMap);
     setSelectedVisualOptions([]);
@@ -189,7 +212,10 @@ export default function SingleProductMapper() {
     <Frame>
       <Page
         title={`Edit Media Map: ${product.title}`}
-        backAction={{ content: 'Products Catalog', url: '/app/products' }}
+        backAction={{
+          content: 'Products Catalog',
+          onAction: () => navigate('/app/products'),
+        }}
         primaryAction={{
           content: isSaving ? 'Saving...' : 'Save Mapping',
           onAction: handleSave,
@@ -206,6 +232,11 @@ export default function SingleProductMapper() {
         ]}
       >
         <BlockStack gap="500">
+          {fetcher.data?.error && (
+            <Banner title="Unable to save product mapping" tone="critical">
+              <p>{fetcher.data.error}</p>
+            </Banner>
+          )}
           <Banner title="Product Configuration">
             <p>Select which options dictate media images & videos, then assign media items to each combination below.</p>
           </Banner>
@@ -217,7 +248,7 @@ export default function SingleProductMapper() {
                   <Text as="h2" variant="headingMd">Step 1 — Choose Visual Options</Text>
                   <Text as="h3" variant="headingSm">Select options that dictate media images & videos:</Text>
                   <InlineStack gap="400">
-                    {product.options.map((opt: any) => (
+                    {product.options.map((opt) => (
                       <Checkbox
                         key={opt.id}
                         label={`${opt.name} (${opt.values.length} values)`}
@@ -226,6 +257,11 @@ export default function SingleProductMapper() {
                       />
                     ))}
                   </InlineStack>
+                  <Checkbox
+                    label="Enable storefront variant media filtering for this product"
+                    checked={enabled}
+                    onChange={setEnabled}
+                  />
                 </BlockStack>
               </Card>
             </Layout.Section>
@@ -262,7 +298,7 @@ export default function SingleProductMapper() {
                       </Text>
 
                       <InlineGrid columns={{ xs: 2, sm: 4, md: 6 }} gap="300">
-                        {product.media.nodes.map((mediaItem: any) => {
+                        {product.media.nodes.map((mediaItem) => {
                           const mediaId = mediaItem.id;
                           const isAssigned = (galleryMap.groups[currentActiveKey]?.mediaIds || []).includes(mediaId);
                           const isShared = galleryMap.sharedMediaIds.includes(mediaId);

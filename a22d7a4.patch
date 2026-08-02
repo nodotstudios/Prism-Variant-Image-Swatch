@@ -1,0 +1,23 @@
+From a22d7a4c7fea17e84047c199ee5350e8b2fe2d33 Mon Sep 17 00:00:00 2001
+From: nodotstudios <admin@nodotstudios.com>
+Date: Sun, 2 Aug 2026 01:23:40 +0530
+Subject: [PATCH] Fix adapter detection order so Dawn isn't hijacked by Horizon
+
+---
+ extensions/prism-variant-media/assets/prism-gallery.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/extensions/prism-variant-media/assets/prism-gallery.js b/extensions/prism-variant-media/assets/prism-gallery.js
+index 87fe62b..cb70789 100644
+--- a/extensions/prism-variant-media/assets/prism-gallery.js
++++ b/extensions/prism-variant-media/assets/prism-gallery.js
+@@ -359,8 +359,8 @@
+   }
+ 
+   function selectAdapter() {
+-    if (HorizonAdapter.detect()) return new HorizonAdapter();
+     if (DawnAdapter.detect()) return new DawnAdapter();
++    if (HorizonAdapter.detect()) return new HorizonAdapter();
+     return new GenericAdapter();
+   }
+ 

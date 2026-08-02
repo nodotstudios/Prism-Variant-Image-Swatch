@@ -20,7 +20,7 @@ const shopify = shopifyApp({
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
-  sessionStorage: storage as any,
+  sessionStorage: storage,
   distribution: AppDistribution.AppStore,
   billing: {
     [PLAN_PRO]: {
